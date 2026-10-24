@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Receitas">
+  <meta name="theme-color" content="#F7F5F2">
+  <title>Receitas</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Receitas</h1>
+    <button id="addBtn" class="round-btn" type="button" aria-label="Nova receita">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <p id="count" class="count" hidden></p>
+    <ul id="list" class="list"></ul>
+
+    <section id="empty" class="empty" hidden>
+      <svg viewBox="0 0 64 64" width="56" height="56" aria-hidden="true">
+        <path d="M10 30h44a22 22 0 0 1-44 0Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M24 22c-3-4 3-6 0-10M32 22c-3-4 3-6 0-10M40 22c-3-4 3-6 0-10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <h2>Ainda sem receitas</h2>
+      <p>Toca em <strong>+</strong> para guardar a primeira.</p>
+    </section>
+  </main>
+
+  <footer class="version" id="version"></footer>
+
+  <div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel">
+      <div class="sheet-bar">
+        <button id="cancelBtn" class="text-btn" type="button">Cancelar</button>
+        <span id="sheetTitle" class="sheet-title">Nova receita</span>
+        <button id="saveBtn" class="text-btn strong" type="submit" form="form" disabled>Guardar</button>
+      </div>
+      <form id="form" class="sheet-body" autocomplete="off">
+        <label class="field">
+          <span class="label">Título</span>
+          <input id="title" name="title" type="text" placeholder="Ex.: Bolo de laranja" enterkeyhint="next" maxlength="120">
+        </label>
+        <label class="field">
+          <span class="label">Ingredientes <small>um por linha</small></span>
+          <textarea id="ingredients" name="ingredients" rows="6" placeholder="200 g de farinha&#10;3 ovos&#10;1 laranja"></textarea>
+        </label>
+        <label class="field">
+          <span class="label">Passos <small>um por linha</small></span>
+          <textarea id="steps" name="steps" rows="6" placeholder="Pré-aquecer o forno a 180 °C.&#10;Bater os ovos com o açúcar.&#10;Juntar a farinha e levar ao forno."></textarea>
+        </label>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
