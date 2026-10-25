@@ -459,6 +459,32 @@ h3.label { margin: 0; }
 .cook-servings .stepper strong { font-size: 20px; color: var(--ink); min-width: 34px; }
 .cook-servings .stepper.changed strong { color: var(--accent); }
 
+/* v0.9.0: fotografias */
+.avatar.photo { background: var(--line); overflow: hidden; padding: 0; }
+.avatar.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.detail-photo {
+  display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
+  border-radius: 18px; background: var(--line); margin: 4px 0 18px;
+}
+.detail-photo[hidden] { display: none; }
+.photo-add {
+  width: 100%; height: 112px; border-radius: 14px;
+  border: 1.5px dashed #E2B9AE; color: var(--accent); background: var(--surface);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  font-size: 15px; font-weight: 500;
+}
+.photo-add[hidden] { display: none; }
+.photo-add.busy { opacity: .5; pointer-events: none; }
+.photo-preview { position: relative; border-radius: 14px; overflow: hidden; background: var(--line); }
+.photo-preview[hidden] { display: none; }
+.photo-preview img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.photo-actions { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; }
+.photo-actions button {
+  padding: 7px 14px; border-radius: 999px; font-size: 14px; font-weight: 500;
+  background: rgba(29, 27, 24, .72); color: #fff;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+
 /* Toast */
 .toast {
   position: fixed; left: 50%; bottom: calc(28px + var(--safe-bottom));

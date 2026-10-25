@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.0 — 2026-10-25
+- Fotografia da receita: tirar com a câmara ou escolher da galeria, alterar ou remover
+- Imagens reduzidas automaticamente para poupar espaço no telemóvel
+- Miniatura na lista e foto em destaque no topo do detalhe
+- Backup e importação incluem as fotografias
+
 ## v0.8.0 — 2026-10-25
 - Ajuste de porções com botões − / + no detalhe e no modo cozinhar
 - As quantidades dos ingredientes são recalculadas e destacadas (inteiros, decimais, frações como ½ e ¾, e intervalos como 2-3)

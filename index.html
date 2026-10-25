@@ -84,6 +84,7 @@
       </div>
     </div>
     <div class="detail-body">
+      <img id="detailPhoto" class="detail-photo" alt="" hidden>
       <h1 id="detailTitle" class="detail-title"></h1>
       <p id="detailMeta" class="detail-meta"></p>
       <div id="detailTags" class="pills" hidden></div>
@@ -150,6 +151,20 @@
         <button id="saveBtn" class="text-btn strong" type="submit" form="form" disabled>Guardar</button>
       </div>
       <form id="form" class="sheet-body" autocomplete="off">
+        <div class="field">
+          <button id="photoAdd" class="photo-add" type="button">
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.6l1.4-2h5l1.4 2h1.6A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/><circle cx="12" cy="12.5" r="3.3" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
+            <span>Adicionar fotografia</span>
+          </button>
+          <div id="photoPreview" class="photo-preview" hidden>
+            <img id="photoImg" alt="Fotografia da receita">
+            <div class="photo-actions">
+              <button id="photoChange" type="button">Alterar</button>
+              <button id="photoRemove" type="button">Remover</button>
+            </div>
+          </div>
+          <input id="photoFile" type="file" accept="image/*" hidden>
+        </div>
         <label class="field">
           <span class="label">Título</span>
           <input id="title" name="title" type="text" placeholder="Ex.: Bolo de laranja" enterkeyhint="next" maxlength="120">

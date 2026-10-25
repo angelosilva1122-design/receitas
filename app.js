@@ -1,12 +1,13 @@
 'use strict';
 
-const APP_VERSION = '0.8.0';
+const APP_VERSION = '0.9.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE = 'recipes';
 const SETTINGS = 'settings';
+const PHOTOS = 'photos'; // fotografias à parte, para a lista carregar depressa
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -18,6 +19,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(SETTINGS)) {
         db.createObjectStore(SETTINGS, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(PHOTOS)) {
+        db.createObjectStore(PHOTOS, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -43,6 +47,51 @@ const getRecipe = (id) => tx('readonly', (s) => s.get(id));
 const saveRecipe = (recipe) => tx('readwrite', (s) => { s.put(recipe); }).then(() => recipe);
 const deleteRecipe = (id) => tx('readwrite', (s) => { s.delete(id); });
 const saveMany = (recipes) => tx('readwrite', (s) => { recipes.forEach((r) => s.put(r)); });
+
+/* ---------- Fotografias ---------- */
+const getPhoto = (id) => tx('readonly', (s) => s.get(id), PHOTOS).then((p) => (p ? p.data : null));
+const getAllPhotos = () => tx('readonly', (s) => s.getAll(), PHOTOS).then((r) => r || []);
+const putPhoto = (id, data) => tx('readwrite', (s) => { s.put({ id, data }); }, PHOTOS);
+const deletePhoto = (id) => tx('readwrite', (s) => { s.delete(id); }, PHOTOS);
+const isImageData = (v) => typeof v === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(v);
+
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('imagem inválida')); };
+    img.src = url;
+  });
+}
+
+// Reduz a imagem: lado maior até `max` px (ou recorte quadrado para miniaturas)
+function resizeImage(img, max, square = false, quality = 0.82) {
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  let sx = 0; let sy = 0; let sw = w; let sh = h;
+  if (square) {
+    const side = Math.min(w, h);
+    sx = (w - side) / 2; sy = (h - side) / 2; sw = side; sh = side;
+  }
+  const scale = Math.min(1, max / Math.max(sw, sh));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(sw * scale);
+  canvas.height = Math.round(sh * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+async function processPhoto(file) {
+  const img = await loadImage(file);
+  return {
+    data: resizeImage(img, 1280),           // ~150–300 KB
+    thumb: resizeImage(img, 160, true, 0.75), // ~8 KB, guardada na receita
+  };
+}
 
 /* ---------- Pratos e categorias ---------- */
 const DEFAULT_DISHES = ['Entradas', 'Sopas', 'Prato Principal', 'Sobremesa', 'Bebidas'];
@@ -323,7 +372,16 @@ function renderList() {
     const avatar = document.createElement('div');
     avatar.className = 'avatar';
     avatar.setAttribute('aria-hidden', 'true');
-    avatar.textContent = (r.title.trim()[0] || '?').toUpperCase();
+    if (isImageData(r.thumb)) {
+      avatar.classList.add('photo');
+      const im = document.createElement('img');
+      im.src = r.thumb;
+      im.alt = '';
+      im.loading = 'lazy';
+      avatar.append(im);
+    } else {
+      avatar.textContent = (r.title.trim()[0] || '?').toUpperCase();
+    }
 
     const text = document.createElement('div');
     text.className = 'row-text';
@@ -443,6 +501,20 @@ let current = null; // receita aberta no detalhe
 
 function fillDetail(r) {
   $('detailTitle').textContent = r.title;
+  const hero = $('detailPhoto');
+  if (isImageData(r.thumb)) {
+    hero.hidden = false;
+    if (hero.dataset.id !== r.id || hero.dataset.thumb !== r.thumb.slice(-32)) {
+      hero.dataset.id = r.id;
+      hero.dataset.thumb = r.thumb.slice(-32);
+      hero.src = r.thumb; // mostra logo a miniatura e troca pela foto completa
+      getPhoto(r.id).then((data) => { if (data && hero.dataset.id === r.id) hero.src = data; }).catch(() => {});
+    }
+  } else {
+    hero.hidden = true;
+    hero.removeAttribute('src');
+    hero.dataset.id = '';
+  }
   const favBtn = $('favBtn');
   favBtn.classList.toggle('on', Boolean(r.favorite));
   favBtn.setAttribute('aria-pressed', String(Boolean(r.favorite)));
@@ -761,6 +833,7 @@ $('deleteBtn').addEventListener('click', async () => {
   if (!confirm(`Apagar "${current.title}"?\nEsta ação não pode ser desfeita.`)) return;
   try {
     await deleteRecipe(current.id);
+    await deletePhoto(current.id).catch(() => {});
     await render();
     goBack();
     toast('Receita apagada');
@@ -787,7 +860,39 @@ let formDish = null;
 let formCats = new Set();
 
 const fields = () => [titleInput, ingInput, stepsInput, prepInput, cookInput, servingsInput, notesInput];
-const snapshot = () => [...fields().map((el) => el.value.trim()), formDish || '', [...formCats].sort().join('|')].join('\u0000');
+let formPhoto; // undefined = sem alterações, null = remover, { data, thumb } = nova
+const snapshot = () => [...fields().map((el) => el.value.trim()), formDish || '', [...formCats].sort().join('|'), formPhoto === undefined ? '' : 'foto'].join('\u0000');
+
+function renderFormPhoto() {
+  const thumb = formPhoto === undefined ? (editing && editing.thumb) : formPhoto && formPhoto.thumb;
+  const has = isImageData(thumb);
+  $('photoPreview').hidden = !has;
+  $('photoAdd').hidden = has;
+  if (has) $('photoImg').src = formPhoto && formPhoto.data ? formPhoto.data : thumb;
+  if (has && formPhoto === undefined && editing) {
+    getPhoto(editing.id).then((d) => { if (d && formPhoto === undefined) $('photoImg').src = d; }).catch(() => {});
+  }
+}
+
+function pickPhoto() { $('photoFile').click(); }
+$('photoAdd').addEventListener('click', pickPhoto);
+$('photoChange').addEventListener('click', pickPhoto);
+$('photoRemove').addEventListener('click', () => { formPhoto = null; renderFormPhoto(); });
+$('photoFile').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  $('photoAdd').classList.add('busy');
+  try {
+    formPhoto = await processPhoto(file);
+    renderFormPhoto();
+  } catch (err) {
+    console.error(err);
+    toast('Não foi possível usar esta imagem');
+  } finally {
+    $('photoAdd').classList.remove('busy');
+  }
+});
 
 function renderFormChips() {
   $('formDish').replaceChildren(
@@ -853,7 +958,9 @@ function openSheet(recipe = null) {
   form.reset();
   formDish = recipe && recipe.dish ? recipe.dish : null;
   formCats = new Set(recipe && recipe.categories ? recipe.categories : []);
+  formPhoto = undefined;
   renderFormChips();
+  renderFormPhoto();
   $('sheet').querySelector('.sheet-body').scrollTop = 0;
   if (recipe) {
     titleInput.value = recipe.title;
@@ -914,10 +1021,13 @@ form.addEventListener('submit', async (e) => {
     notes: notesInput.value.trim(),
     dish: formDish,
     categories: [...formCats].sort(byName),
+    ...(formPhoto === null ? { thumb: null } : formPhoto ? { thumb: formPhoto.thumb } : {}),
     updatedAt: now,
   };
   saveBtn.disabled = true;
   try {
+    if (formPhoto) await putPhoto(recipe.id, formPhoto.data);
+    else if (formPhoto === null) await deletePhoto(recipe.id);
     await saveRecipe(recipe);
     closeSheet();
     await render();
@@ -959,9 +1069,11 @@ function formatDate(ts) {
 // Receitas pré-carregadas ao abrir a folha: no iPhone a partilha tem de
 // arrancar logo no toque, sem esperar pela base de dados.
 let exportCache = [];
+let exportPhotos = [];
 
 async function refreshBackupInfo() {
   try { exportCache = await getAllRecipes(); } catch { exportCache = []; }
+  try { exportPhotos = await getAllPhotos(); } catch { exportPhotos = []; }
   const count = exportCache.length;
   const last = readLastBackup();
   const el = $('lastBackup');
@@ -1060,12 +1172,13 @@ async function exportRecipes() {
   const now = new Date();
   const data = {
     format: BACKUP_FORMAT,
-    formatVersion: 2,
+    formatVersion: 3,
     appVersion: APP_VERSION,
     exportedAt: now.toISOString(),
     dishes: taxonomy.dishes,
     categories: taxonomy.categories,
     recipes,
+    photos: Object.fromEntries(exportPhotos.filter((p) => isImageData(p.data)).map((p) => [p.id, p.data])),
   };
   const stamp = now.toISOString().slice(0, 10);
   const name = `receitas-backup-${stamp}.json`;
@@ -1113,6 +1226,7 @@ function cleanRecipe(raw) {
     dish: typeof raw.dish === 'string' && raw.dish.trim() ? raw.dish.trim() : null,
     categories: strList(raw.categories),
     favorite: raw.favorite === true,
+    thumb: isImageData(raw.thumb) ? raw.thumb : null,
     createdAt: num(raw.createdAt),
     updatedAt: num(raw.updatedAt),
   };
@@ -1168,6 +1282,12 @@ async function importRecipes(file) {
   const skipped = incoming.length - added - updated;
 
   if (toSave.length) await saveMany(toSave);
+  // Fotografias das receitas importadas
+  const photos = !Array.isArray(data) && data.photos && typeof data.photos === 'object' ? data.photos : {};
+  for (const r of toSave) {
+    if (isImageData(photos[r.id])) await putPhoto(r.id, photos[r.id]);
+    else if (!r.thumb) await deletePhoto(r.id).catch(() => {});
+  }
   await render();
   refreshBackupInfo();
 
