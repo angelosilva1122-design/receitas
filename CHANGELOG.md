@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0 — 2026-10-25
+- Novo botão de cópia de segurança no topo da lista
+- Exportar todas as receitas para um ficheiro JSON (no iPhone abre a folha de partilha: Guardar em Ficheiros, AirDrop, Mail…)
+- Importar receitas de um ficheiro de backup, juntando-as às atuais sem duplicar
+- Indicação da data do último backup
+
 ## v0.2.0 — 2026-10-25
 - Tocar numa receita abre o detalhe: ingredientes e passos numerados
 - Editar receita (reaproveita o formulário, com aviso se houver alterações por guardar)

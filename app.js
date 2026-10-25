@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -38,6 +38,7 @@ const getAllRecipes = () => tx('readonly', (s) => s.getAll()).then((r) => r || [
 const getRecipe = (id) => tx('readonly', (s) => s.get(id));
 const saveRecipe = (recipe) => tx('readwrite', (s) => { s.put(recipe); }).then(() => recipe);
 const deleteRecipe = (id) => tx('readwrite', (s) => { s.delete(id); });
+const saveMany = (recipes) => tx('readwrite', (s) => { recipes.forEach((r) => s.put(r)); });
 
 // Pede ao browser para não apagar os dados automaticamente
 if (navigator.storage && navigator.storage.persist) {
@@ -315,6 +316,179 @@ form.addEventListener('submit', async (e) => {
 $('addBtn').addEventListener('click', () => openSheet());
 $('cancelBtn').addEventListener('click', requestClose);
 sheet.querySelector('[data-close]').addEventListener('click', requestClose);
+
+/* ---------- Cópia de segurança ---------- */
+const BACKUP_FORMAT = 'receitas-backup';
+const LAST_BACKUP_KEY = 'receitas.lastBackup';
+const backupSheet = $('backupSheet');
+
+function readLastBackup() {
+  try { return Number(localStorage.getItem(LAST_BACKUP_KEY)) || 0; } catch { return 0; }
+}
+function writeLastBackup(ts) {
+  try { localStorage.setItem(LAST_BACKUP_KEY, String(ts)); } catch { /* sem armazenamento */ }
+}
+
+function formatDate(ts) {
+  return new Date(ts).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Receitas pré-carregadas ao abrir a folha: no iPhone a partilha tem de
+// arrancar logo no toque, sem esperar pela base de dados.
+let exportCache = [];
+
+async function refreshBackupInfo() {
+  try { exportCache = await getAllRecipes(); } catch { exportCache = []; }
+  const count = exportCache.length;
+  const last = readLastBackup();
+  const el = $('lastBackup');
+  el.classList.toggle('warn', !last && count > 0);
+  el.textContent = last ? `Último backup: ${formatDate(last)}` : (count > 0 ? 'Ainda não fizeste nenhuma cópia.' : '');
+  el.hidden = !el.textContent;
+  $('exportBtn').disabled = count === 0;
+  $('exportHint').textContent = count === 0
+    ? 'Ainda não há receitas para exportar'
+    : `Cria um ficheiro com ${plural(count, 'receita', 'receitas')}`;
+}
+
+function openBackup() {
+  refreshBackupInfo();
+  backupSheet.hidden = false;
+  void backupSheet.offsetHeight;
+  backupSheet.classList.add('open');
+}
+
+function closeBackup() {
+  backupSheet.classList.remove('open');
+  setTimeout(() => { backupSheet.hidden = true; }, 320);
+}
+
+function downloadFile(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+async function exportRecipes() {
+  const recipes = exportCache;
+  if (!recipes.length) return;
+  const now = new Date();
+  const data = {
+    format: BACKUP_FORMAT,
+    formatVersion: 1,
+    appVersion: APP_VERSION,
+    exportedAt: now.toISOString(),
+    recipes,
+  };
+  const stamp = now.toISOString().slice(0, 10);
+  const name = `receitas-backup-${stamp}.json`;
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const file = new File([blob], name, { type: 'application/json' });
+
+  // No iPhone abre a folha de partilha ("Guardar em Ficheiros", AirDrop, Mail…)
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Backup das receitas' });
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // cancelado pelo utilizador
+      if (e && e.name === 'NotAllowedError') downloadFile(blob, name);
+      else throw e;
+    }
+  } else {
+    downloadFile(blob, name);
+  }
+  writeLastBackup(Date.now());
+  refreshBackupInfo();
+  toast(`${plural(recipes.length, 'receita exportada', 'receitas exportadas')}`);
+}
+
+const strList = (v) => (Array.isArray(v) ? v : [])
+  .filter((x) => typeof x === 'string')
+  .map((x) => x.trim())
+  .filter(Boolean);
+
+function cleanRecipe(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const title = typeof raw.title === 'string' ? raw.title.trim() : '';
+  if (!title) return null;
+  const now = Date.now();
+  const num = (v) => (Number.isFinite(v) ? v : now);
+  return {
+    ...raw, // mantém campos de versões futuras
+    id: typeof raw.id === 'string' && raw.id ? raw.id : newId(),
+    title,
+    ingredients: strList(raw.ingredients),
+    steps: strList(raw.steps),
+    createdAt: num(raw.createdAt),
+    updatedAt: num(raw.updatedAt),
+  };
+}
+
+async function importRecipes(file) {
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    toast('Ficheiro inválido');
+    return;
+  }
+  const list = Array.isArray(data) ? data : (data && Array.isArray(data.recipes) ? data.recipes : null);
+  if (!list) {
+    toast('Este ficheiro não é um backup de receitas');
+    return;
+  }
+  const incoming = list.map(cleanRecipe).filter(Boolean);
+  if (!incoming.length) {
+    toast('O ficheiro não tem receitas');
+    return;
+  }
+  if (!confirm(`Importar ${plural(incoming.length, 'receita', 'receitas')}?\nAs receitas que já tens mantêm-se.`)) return;
+
+  const current = await getAllRecipes();
+  const existing = new Map(current.map((r) => [r.id, r]));
+  // Receitas sem id (ex.: ficheiros feitos à mão) comparam-se pelo conteúdo
+  const contentKey = (r) => JSON.stringify([r.title.toLocaleLowerCase('pt'), r.ingredients, r.steps]);
+  const known = new Set(current.map(contentKey));
+  const toSave = [];
+  let added = 0;
+  let updated = 0;
+  for (const r of incoming) {
+    const cur = existing.get(r.id);
+    const key = contentKey(r);
+    if (!cur && known.has(key)) continue; // já existe igual
+    if (!cur) { added++; toSave.push(r); known.add(key); }
+    else if (r.updatedAt > (cur.updatedAt || 0)) { updated++; toSave.push(r); }
+  }
+  const skipped = incoming.length - added - updated;
+
+  if (toSave.length) await saveMany(toSave);
+  await render();
+  refreshBackupInfo();
+
+  const parts = [];
+  if (added) parts.push(plural(added, 'nova', 'novas'));
+  if (updated) parts.push(plural(updated, 'atualizada', 'atualizadas'));
+  if (!parts.length) toast('Já tinhas todas estas receitas');
+  else toast(parts.join(' · ') + (skipped ? ` · ${skipped} iguais` : ''));
+}
+
+$('backupBtn').addEventListener('click', openBackup);
+$('backupClose').addEventListener('click', closeBackup);
+backupSheet.querySelector('[data-close]').addEventListener('click', closeBackup);
+$('exportBtn').addEventListener('click', () => {
+  exportRecipes().catch((e) => { console.error(e); toast('Não foi possível exportar'); });
+});
+$('importBtn').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (file) importRecipes(file).catch((err) => { console.error(err); toast('Não foi possível importar'); });
+});
 
 /* ---------- Arranque ---------- */
 $('version').textContent = `v${APP_VERSION}`;

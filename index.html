@@ -17,9 +17,14 @@
 <body>
   <header class="topbar">
     <h1>Receitas</h1>
-    <button id="addBtn" class="round-btn" type="button" aria-label="Nova receita">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
-    </button>
+    <div class="top-actions">
+      <button id="backupBtn" class="round-btn soft" type="button" aria-label="Cópia de segurança">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </button>
+      <button id="addBtn" class="round-btn" type="button" aria-label="Nova receita">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+    </div>
   </header>
 
   <main>
@@ -84,6 +89,32 @@
           <textarea id="steps" name="steps" rows="6" placeholder="Pré-aquecer o forno a 180 °C.&#10;Bater os ovos com o açúcar.&#10;Juntar a farinha e levar ao forno."></textarea>
         </label>
       </form>
+    </div>
+  </div>
+
+  <div id="backupSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="backupTitle" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel compact">
+      <div class="sheet-bar">
+        <span></span>
+        <span id="backupTitle" class="sheet-title">Cópia de segurança</span>
+        <button id="backupClose" class="text-btn strong" type="button">OK</button>
+      </div>
+      <div class="sheet-body">
+        <p class="backup-info">As receitas vivem só neste telemóvel. Exporta uma cópia de vez em quando e guarda-a em <strong>Ficheiros</strong> ou no iCloud Drive.</p>
+        <p id="lastBackup" class="backup-last"></p>
+        <div class="action-list">
+          <button id="exportBtn" class="action" type="button">
+            <span class="action-icon"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span>
+            <span class="action-text"><strong>Exportar receitas</strong><small id="exportHint">Cria um ficheiro com todas as receitas</small></span>
+          </button>
+          <button id="importBtn" class="action" type="button">
+            <span class="action-icon"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span>
+            <span class="action-text"><strong>Importar receitas</strong><small>Junta as receitas de um ficheiro de backup</small></span>
+          </button>
+        </div>
+        <input id="importFile" type="file" accept=".json,application/json" hidden>
+      </div>
     </div>
   </div>
 
