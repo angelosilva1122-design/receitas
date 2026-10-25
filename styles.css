@@ -326,6 +326,30 @@ textarea.short { min-height: 88px; }
 .set-title { margin: 14px 0 -4px; }
 h3.label { margin: 0; }
 
+/* v0.6.0: favoritos e ordenação */
+.bar-actions { display: flex; align-items: center; gap: 14px; }
+.icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; }
+.fav-btn { color: var(--accent); }
+.fav-btn svg path { fill: none; transition: fill .15s ease; }
+.fav-btn.on svg path { fill: currentColor; }
+.fav-btn:active { transform: scale(.88); }
+.row-fav { color: var(--accent); font-size: 16px; margin-left: auto; flex: none; }
+.row-fav + .chevron { margin-left: 4px; }
+.chip.fav.on { background: var(--accent); border-color: var(--accent); }
+.chip.fav:not(.on) { color: var(--accent); }
+
+.count-row { align-items: center; }
+.count-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.sort { position: relative; display: inline-flex; align-items: center; color: var(--accent); }
+.sort select {
+  appearance: none; -webkit-appearance: none;
+  background: transparent; border: 0; color: inherit;
+  font: inherit; font-size: 16px; font-weight: 500; /* 16px evita o zoom no iPhone */
+  padding: 4px 18px 4px 4px; width: auto;
+}
+.sort svg { position: absolute; right: 2px; pointer-events: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
 /* Toast */
 .toast {
   position: fixed; left: 50%; bottom: calc(28px + var(--safe-bottom));
@@ -341,3 +365,4 @@ h3.label { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+.sort[hidden] { display: none; }

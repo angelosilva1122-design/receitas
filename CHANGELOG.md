@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.0 — 2026-10-25
+- Favoritos: botão ♥ no detalhe da receita, coração na lista e filtro "♥ Favoritas"
+- Ordenação da lista: A–Z, mais recentes ou mais rápidas (fica guardada)
+- Categorias base passam a começar por maiúscula (Carne, Peixe, Vegetariano…), incluindo as já atribuídas às receitas
+
 ## v0.5.0 — 2026-10-25
 - Cada receita pode ter um prato (Entradas, Sopas, Prato Principal, Sobremesa, Bebidas) e várias categorias (carne, peixe, vegetariano, arroz, massa, batata, italiano, bolo)
 - Pratos e categorias escolhem-se no formulário, com opção de criar novos na hora

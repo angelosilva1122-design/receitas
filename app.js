@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '0.5.0';
+const APP_VERSION = '0.6.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -46,7 +46,7 @@ const saveMany = (recipes) => tx('readwrite', (s) => { recipes.forEach((r) => s.
 
 /* ---------- Pratos e categorias ---------- */
 const DEFAULT_DISHES = ['Entradas', 'Sopas', 'Prato Principal', 'Sobremesa', 'Bebidas'];
-const DEFAULT_CATEGORIES = ['carne', 'peixe', 'vegetariano', 'arroz', 'massa', 'batata', 'italiano', 'bolo'];
+const DEFAULT_CATEGORIES = ['Carne', 'Peixe', 'Vegetariano', 'Arroz', 'Massa', 'Batata', 'Italiano', 'Bolo'];
 
 // Comparação sem acentos nem maiúsculas ("Sopa" = "sopa", "Pão" = "pao")
 const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -58,9 +58,30 @@ let taxonomy = { dishes: [...DEFAULT_DISHES], categories: [...DEFAULT_CATEGORIES
 async function loadTaxonomy() {
   try {
     const saved = await tx('readonly', (s) => s.get('taxonomy'), SETTINGS);
-    if (saved) taxonomy = { dishes: saved.dishes || [], categories: saved.categories || [] };
+    if (saved) taxonomy = { dishes: saved.dishes || [], categories: saved.categories || [], capitalized: Boolean(saved.capitalized) };
     else await saveTaxonomy(); // primeira vez: grava as listas iniciais
+    if (!saved || !saved.capitalized) await capitalizeDefaults();
   } catch (e) { console.error(e); }
+}
+
+// v0.6.0: as categorias base passam a começar por maiúscula ("carne" → "Carne"),
+// tanto na lista como nas receitas que já as usam. Corre uma única vez.
+async function capitalizeDefaults() {
+  const rename = new Map();
+  for (const def of DEFAULT_CATEGORIES) {
+    const old = def.toLowerCase();
+    if (taxonomy.categories.includes(old)) rename.set(old, def);
+  }
+  if (rename.size) {
+    taxonomy.categories = taxonomy.categories.map((c) => rename.get(c) || c);
+    const recipes = await getAllRecipes();
+    const changed = recipes
+      .filter((r) => (r.categories || []).some((c) => rename.has(c)))
+      .map((r) => ({ ...r, categories: r.categories.map((c) => rename.get(c) || c).sort(byName) }));
+    if (changed.length) await saveMany(changed);
+  }
+  taxonomy.capitalized = true;
+  await saveTaxonomy();
 }
 
 function saveTaxonomy() {
@@ -145,10 +166,25 @@ function toast(msg) {
 }
 
 /* ---------- Lista, pesquisa e filtros ---------- */
-const filters = { q: '', dish: null, cats: new Set() };
+const filters = { q: '', dish: null, cats: new Set(), fav: false };
 let allRecipes = [];
 
+/* Ordenação (guardada neste telemóvel) */
+const SORT_KEY = 'receitas.sort';
+const SORTS = {
+  az: (a, b) => byName(a.title, b.title),
+  recent: (a, b) => (b.createdAt || 0) - (a.createdAt || 0),
+  quick: (a, b) => {
+    const ta = totalTime(a) || Infinity;
+    const tb = totalTime(b) || Infinity;
+    return ta === tb ? byName(a.title, b.title) : ta - tb;
+  },
+};
+let sortBy = 'az';
+try { const v = localStorage.getItem(SORT_KEY); if (SORTS[v]) sortBy = v; } catch { /* ignora */ }
+
 function matches(r) {
+  if (filters.fav && !r.favorite) return false;
   if (filters.dish && r.dish !== filters.dish) return false;
   const cats = r.categories || [];
   for (const c of filters.cats) if (!cats.includes(c)) return false;
@@ -165,6 +201,8 @@ function renderFilters() {
   const usedCats = new Set(allRecipes.flatMap((r) => r.categories || []));
   // Limpa filtros que deixaram de existir
   if (filters.dish && !usedDishes.has(filters.dish)) filters.dish = null;
+  const hasFav = allRecipes.some((r) => r.favorite);
+  if (!hasFav) filters.fav = false;
   for (const c of [...filters.cats]) if (!usedCats.has(c)) filters.cats.delete(c);
 
   const dishes = taxonomy.dishes.filter((d) => usedDishes.has(d));
@@ -172,10 +210,11 @@ function renderFilters() {
 
   const dRow = $('dishFilters');
   dRow.replaceChildren(
-    chip('Todos', { active: !filters.dish, data: { dish: '' } }),
+    ...(hasFav ? [chip('♥ Favoritas', { active: filters.fav, cls: 'fav', data: { fav: '1' } })] : []),
+    ...(dishes.length ? [chip('Todos', { active: !filters.dish, data: { dish: '' } })] : []),
     ...dishes.map((d) => chip(d, { active: filters.dish === d, data: { dish: d } })),
   );
-  dRow.hidden = dishes.length === 0;
+  dRow.hidden = dishes.length === 0 && !hasFav;
 
   const cRow = $('catFilters');
   cRow.replaceChildren(...cats.map((c) => chip(c, { active: filters.cats.has(c), cls: 'tag', data: { cat: c } })));
@@ -183,7 +222,7 @@ function renderFilters() {
 }
 
 function renderList() {
-  const shown = allRecipes.filter(matches);
+  const shown = allRecipes.filter(matches).sort(SORTS[sortBy]);
   const list = $('list');
   list.replaceChildren();
 
@@ -217,12 +256,20 @@ function renderList() {
     chev.setAttribute('aria-hidden', 'true');
     chev.innerHTML = '<path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
 
-    li.append(avatar, text, chev);
+    if (r.favorite) {
+      const heart = document.createElement('span');
+      heart.className = 'row-fav';
+      heart.setAttribute('aria-label', 'Favorita');
+      heart.textContent = '♥';
+      li.append(avatar, text, heart, chev);
+    } else {
+      li.append(avatar, text, chev);
+    }
     list.append(li);
   }
 
   const total = allRecipes.length;
-  const filtering = Boolean(filters.q.trim() || filters.dish || filters.cats.size);
+  const filtering = Boolean(filters.q.trim() || filters.dish || filters.cats.size || filters.fav);
   $('empty').hidden = total > 0;
   $('tools').hidden = total === 0;
   $('noResults').hidden = !(total > 0 && shown.length === 0);
@@ -231,6 +278,8 @@ function renderList() {
     ? `${shown.length} de ${plural(total, 'receita', 'receitas')}`
     : plural(total, 'receita', 'receitas');
   $('clearFilters').hidden = !filtering;
+  $('sort').value = sortBy;
+  $('sort').parentElement.hidden = total < 2;
 }
 
 async function render() {
@@ -241,7 +290,6 @@ async function render() {
     toast('Erro ao ler as receitas');
     console.error(e);
   }
-  allRecipes.sort((a, b) => byName(a.title, b.title));
   renderFilters();
   renderList();
 }
@@ -256,8 +304,12 @@ $('search').addEventListener('keydown', (e) => {
 $('dishFilters').addEventListener('click', (e) => {
   const b = e.target.closest('.chip');
   if (!b) return;
-  const d = b.dataset.dish;
-  filters.dish = !d || filters.dish === d ? null : d;
+  if (b.dataset.fav) {
+    filters.fav = !filters.fav;
+  } else {
+    const d = b.dataset.dish;
+    filters.dish = !d || filters.dish === d ? null : d;
+  }
   renderFilters();
   renderList();
 });
@@ -273,11 +325,17 @@ function clearFilters() {
   filters.q = '';
   filters.dish = null;
   filters.cats.clear();
+  filters.fav = false;
   $('search').value = '';
   renderFilters();
   renderList();
 }
 $('clearFilters').addEventListener('click', clearFilters);
+$('sort').addEventListener('change', (e) => {
+  sortBy = SORTS[e.target.value] ? e.target.value : 'az';
+  try { localStorage.setItem(SORT_KEY, sortBy); } catch { /* ignora */ }
+  renderList();
+});
 $('noResultsClear').addEventListener('click', clearFilters);
 
 $('list').addEventListener('click', (e) => {
@@ -298,6 +356,10 @@ let current = null; // receita aberta no detalhe
 
 function fillDetail(r) {
   $('detailTitle').textContent = r.title;
+  const favBtn = $('favBtn');
+  favBtn.classList.toggle('on', Boolean(r.favorite));
+  favBtn.setAttribute('aria-pressed', String(Boolean(r.favorite)));
+  favBtn.setAttribute('aria-label', r.favorite ? 'Remover dos favoritos' : 'Marcar como favorita');
   $('detailMeta').textContent = summary({ ...r, dish: null }); // o prato aparece na etiqueta
 
   const tags = $('detailTags');
@@ -396,6 +458,21 @@ window.addEventListener('popstate', () => {
 
 $('backBtn').addEventListener('click', goBack);
 $('editBtn').addEventListener('click', () => { if (current) openSheet(current); });
+
+$('favBtn').addEventListener('click', async () => {
+  if (!current) return;
+  const r = { ...current, favorite: !current.favorite, updatedAt: Date.now() };
+  try {
+    await saveRecipe(r);
+    current = r;
+    fillDetail(r);
+    await render();
+    toast(r.favorite ? 'Adicionada aos favoritos' : 'Removida dos favoritos');
+  } catch (e) {
+    console.error(e);
+    toast('Não foi possível guardar');
+  }
+});
 
 $('deleteBtn').addEventListener('click', async () => {
   if (!current) return;
@@ -752,6 +829,7 @@ function cleanRecipe(raw) {
     notes: typeof raw.notes === 'string' ? raw.notes.trim() : '',
     dish: typeof raw.dish === 'string' && raw.dish.trim() ? raw.dish.trim() : null,
     categories: strList(raw.categories),
+    favorite: raw.favorite === true,
     createdAt: num(raw.createdAt),
     updatedAt: num(raw.updatedAt),
   };
