@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.0 — 2026-10-25
+- Modo cozinhar: botão "Cozinhar" no detalhe abre um ecrã próprio com letra grande
+- Ecrã mantém-se ligado enquanto se cozinha (iOS 16.4 ou mais recente)
+- Ingredientes que se riscam com um toque, com contador
+- Passos um de cada vez, com botões Anterior/Seguinte e gesto de deslizar
+- Filtro de categorias passa a ter "Todas" e a permitir só uma categoria de cada vez
+
 ## v0.6.0 — 2026-10-25
 - Favoritos: botão ♥ no detalhe da receita, coração na lista e filtro "♥ Favoritas"
 - Ordenação da lista: A–Z, mais recentes ou mais rápidas (fica guardada)

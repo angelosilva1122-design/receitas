@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '0.6.0';
+const APP_VERSION = '0.7.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -166,7 +166,7 @@ function toast(msg) {
 }
 
 /* ---------- Lista, pesquisa e filtros ---------- */
-const filters = { q: '', dish: null, cats: new Set(), fav: false };
+const filters = { q: '', dish: null, cat: null, fav: false };
 let allRecipes = [];
 
 /* Ordenação (guardada neste telemóvel) */
@@ -187,7 +187,7 @@ function matches(r) {
   if (filters.fav && !r.favorite) return false;
   if (filters.dish && r.dish !== filters.dish) return false;
   const cats = r.categories || [];
-  for (const c of filters.cats) if (!cats.includes(c)) return false;
+  if (filters.cat && !cats.includes(filters.cat)) return false;
   if (filters.q) {
     const words = norm(filters.q).split(/\s+/).filter(Boolean);
     const hay = norm([r.title, r.dish || '', cats.join(' '), r.ingredients.join(' ')].join(' '));
@@ -203,7 +203,7 @@ function renderFilters() {
   if (filters.dish && !usedDishes.has(filters.dish)) filters.dish = null;
   const hasFav = allRecipes.some((r) => r.favorite);
   if (!hasFav) filters.fav = false;
-  for (const c of [...filters.cats]) if (!usedCats.has(c)) filters.cats.delete(c);
+  if (filters.cat && !usedCats.has(filters.cat)) filters.cat = null;
 
   const dishes = taxonomy.dishes.filter((d) => usedDishes.has(d));
   const cats = taxonomy.categories.filter((c) => usedCats.has(c)).sort(byName);
@@ -217,7 +217,10 @@ function renderFilters() {
   dRow.hidden = dishes.length === 0 && !hasFav;
 
   const cRow = $('catFilters');
-  cRow.replaceChildren(...cats.map((c) => chip(c, { active: filters.cats.has(c), cls: 'tag', data: { cat: c } })));
+  cRow.replaceChildren(
+    chip('Todas', { active: !filters.cat, cls: 'tag', data: { cat: '' } }),
+    ...cats.map((c) => chip(c, { active: filters.cat === c, cls: 'tag', data: { cat: c } })),
+  );
   cRow.hidden = cats.length === 0;
 }
 
@@ -269,7 +272,7 @@ function renderList() {
   }
 
   const total = allRecipes.length;
-  const filtering = Boolean(filters.q.trim() || filters.dish || filters.cats.size || filters.fav);
+  const filtering = Boolean(filters.q.trim() || filters.dish || filters.cat || filters.fav);
   $('empty').hidden = total > 0;
   $('tools').hidden = total === 0;
   $('noResults').hidden = !(total > 0 && shown.length === 0);
@@ -317,14 +320,14 @@ $('catFilters').addEventListener('click', (e) => {
   const b = e.target.closest('.chip');
   if (!b) return;
   const c = b.dataset.cat;
-  if (filters.cats.has(c)) filters.cats.delete(c); else filters.cats.add(c);
+  filters.cat = !c || filters.cat === c ? null : c;
   renderFilters();
   renderList();
 });
 function clearFilters() {
   filters.q = '';
   filters.dish = null;
-  filters.cats.clear();
+  filters.cat = null;
   filters.fav = false;
   $('search').value = '';
   renderFilters();
@@ -450,13 +453,178 @@ function goBack() {
   }
 }
 
-window.addEventListener('popstate', () => {
-  const id = history.state && history.state.recipe;
-  if (id) showDetail(id);
-  else hideDetail();
+window.addEventListener('popstate', async () => {
+  const st = history.state || {};
+  if (st.recipe) {
+    await showDetail(st.recipe);
+    if (st.cook && current) showCook(current);
+    else hideCook();
+  } else {
+    hideCook();
+    hideDetail();
+  }
 });
 
 $('backBtn').addEventListener('click', goBack);
+
+/* ---------- Modo cozinhar ---------- */
+const cook = $('cook');
+const cookState = { id: null, tab: 'ing', step: 0, checked: new Set() };
+let wakeLock = null;
+
+async function keepAwake() {
+  if (!('wakeLock' in navigator)) return false;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+    return true;
+  } catch (e) {
+    console.warn('wakeLock', e);
+    return false;
+  }
+}
+function releaseAwake() {
+  if (wakeLock) wakeLock.release().catch(() => {});
+  wakeLock = null;
+}
+// Ao voltar à app (ex.: depois de bloquear o ecrã), volta a manter o ecrã ligado
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !cook.hidden && !wakeLock) keepAwake();
+});
+
+function renderCook() {
+  const r = current;
+  if (!r) return;
+  const hasIng = r.ingredients.length > 0;
+  const hasSteps = r.steps.length > 0;
+  if (!hasIng) cookState.tab = 'steps';
+  if (!hasSteps) cookState.tab = 'ing';
+
+  $('cookTitle').textContent = r.title;
+  $('cookTabs').hidden = !(hasIng && hasSteps);
+  $('tabIng').classList.toggle('on', cookState.tab === 'ing');
+  $('tabSteps').classList.toggle('on', cookState.tab === 'steps');
+  $('tabIng').setAttribute('aria-selected', String(cookState.tab === 'ing'));
+  $('tabSteps').setAttribute('aria-selected', String(cookState.tab === 'steps'));
+  const done = r.ingredients.filter((_, i) => cookState.checked.has(i)).length;
+  $('tabIng').textContent = hasIng ? `Ingredientes ${done}/${r.ingredients.length}` : 'Ingredientes';
+
+  // Ingredientes
+  $('cookIng').hidden = cookState.tab !== 'ing';
+  $('cookIngList').replaceChildren(...r.ingredients.map((t, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cook-ing';
+    b.dataset.i = i;
+    const on = cookState.checked.has(i);
+    b.classList.toggle('done', on);
+    b.setAttribute('aria-pressed', String(on));
+    const box = document.createElement('span');
+    box.className = 'box';
+    box.setAttribute('aria-hidden', 'true');
+    const txt = document.createElement('span');
+    txt.textContent = t;
+    b.append(box, txt);
+    return b;
+  }));
+  $('toSteps').hidden = !hasSteps;
+
+  // Passos
+  $('cookSteps').hidden = cookState.tab !== 'steps';
+  if (hasSteps) {
+    const n = r.steps.length;
+    cookState.step = Math.max(0, Math.min(cookState.step, n - 1));
+    $('stepCount').textContent = `Passo ${cookState.step + 1} de ${n}`;
+    $('stepText').textContent = r.steps[cookState.step];
+    $('stepDots').replaceChildren(...r.steps.map((_, i) => {
+      const d = document.createElement('span');
+      d.className = 'dot' + (i === cookState.step ? ' on' : i < cookState.step ? ' past' : '');
+      return d;
+    }));
+    $('prevStep').disabled = cookState.step === 0;
+    $('nextStep').textContent = cookState.step === n - 1 ? 'Concluir' : 'Seguinte';
+  }
+}
+
+function showCook(r) {
+  if (cookState.id !== r.id) {
+    cookState.id = r.id;
+    cookState.step = 0;
+    cookState.checked = new Set();
+    cookState.tab = r.ingredients.length ? 'ing' : 'steps';
+  }
+  renderCook();
+  if (cook.hidden) {
+    cook.hidden = false;
+    void cook.offsetHeight;
+    cook.classList.add('open');
+    keepAwake().then((ok) => { $('awakeNote').hidden = ok; });
+  }
+}
+
+function hideCook() {
+  if (cook.hidden) return;
+  releaseAwake();
+  cook.classList.remove('open');
+  setTimeout(() => { if (!cook.classList.contains('open')) cook.hidden = true; }, 300);
+}
+
+function openCook() {
+  if (!current) return;
+  if (!current.ingredients.length && !current.steps.length) {
+    toast('Esta receita ainda não tem ingredientes nem passos');
+    return;
+  }
+  history.pushState({ recipe: current.id, cook: true }, '', `#r=${encodeURIComponent(current.id)}&cozinhar`);
+  showCook(current);
+}
+
+function closeCook() {
+  if (history.state && history.state.cook) history.back();
+  else hideCook();
+}
+
+function goStep(delta) {
+  const n = current ? current.steps.length : 0;
+  const next = cookState.step + delta;
+  if (next >= n) { closeCook(); toast('Bom apetite!'); return; }
+  if (next < 0) return;
+  cookState.step = next;
+  renderCook();
+}
+
+$('cookBtn').addEventListener('click', openCook);
+$('cookClose').addEventListener('click', closeCook);
+$('tabIng').addEventListener('click', () => { cookState.tab = 'ing'; renderCook(); });
+$('tabSteps').addEventListener('click', () => { cookState.tab = 'steps'; renderCook(); });
+$('toSteps').addEventListener('click', () => { cookState.tab = 'steps'; renderCook(); });
+$('cookIngList').addEventListener('click', (e) => {
+  const b = e.target.closest('.cook-ing');
+  if (!b) return;
+  const i = Number(b.dataset.i);
+  if (cookState.checked.has(i)) cookState.checked.delete(i); else cookState.checked.add(i);
+  renderCook();
+});
+$('prevStep').addEventListener('click', () => goStep(-1));
+$('nextStep').addEventListener('click', () => goStep(1));
+
+// Deslizar para o lado também muda de passo
+let touchX = null;
+let touchY = null;
+$('stepCard').addEventListener('touchstart', (e) => {
+  touchX = e.touches[0].clientX;
+  touchY = e.touches[0].clientY;
+}, { passive: true });
+$('stepCard').addEventListener('touchend', (e) => {
+  if (touchX === null) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  const dy = e.changedTouches[0].clientY - touchY;
+  touchX = null;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    if (dx < 0 && cookState.step < current.steps.length - 1) goStep(1);
+    else if (dx > 0) goStep(-1);
+  }
+});
 $('editBtn').addEventListener('click', () => { if (current) openSheet(current); });
 
 $('favBtn').addEventListener('click', async () => {

@@ -89,6 +89,11 @@
       <div id="detailTags" class="pills" hidden></div>
       <div id="detailFacts" class="facts" hidden></div>
 
+      <button id="cookBtn" class="cook-btn" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 11h16a8 8 0 0 1-16 0Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M9 7c-1-1.5 1-2.5 0-4M15 7c-1-1.5 1-2.5 0-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+        Cozinhar
+      </button>
+
       <h2 class="section-title">Ingredientes</h2>
       <ul id="detailIngredients" class="ingredients"></ul>
       <p id="noIngredients" class="none" hidden>Sem ingredientes.</p>
@@ -102,6 +107,36 @@
 
       <button id="deleteBtn" class="delete-btn" type="button">Apagar receita</button>
     </div>
+  </section>
+
+  <section id="cook" class="cook" aria-labelledby="cookTitle" hidden>
+    <div class="cook-bar">
+      <button id="cookClose" class="icon-btn close" type="button" aria-label="Sair do modo cozinhar">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+      <h1 id="cookTitle" class="cook-title"></h1>
+      <span class="icon-btn" aria-hidden="true"></span>
+    </div>
+    <div id="cookTabs" class="segmented" role="tablist">
+      <button id="tabIng" type="button" role="tab">Ingredientes</button>
+      <button id="tabSteps" type="button" role="tab">Passos</button>
+    </div>
+
+    <div id="cookIng" class="cook-body">
+      <div id="cookIngList" class="cook-ing-list"></div>
+      <button id="toSteps" class="cook-primary" type="button">Começar os passos</button>
+    </div>
+
+    <div id="cookSteps" class="cook-body steps-view" hidden>
+      <p id="stepCount" class="step-count"></p>
+      <div id="stepCard" class="step-card"><p id="stepText"></p></div>
+      <div id="stepDots" class="dots" aria-hidden="true"></div>
+      <div class="step-nav">
+        <button id="prevStep" class="cook-secondary" type="button">Anterior</button>
+        <button id="nextStep" class="cook-primary" type="button">Seguinte</button>
+      </div>
+    </div>
+    <p id="awakeNote" class="awake-note" hidden>Neste iPhone o ecrã pode desligar-se sozinho. Atualiza o iOS para o manter sempre ligado.</p>
   </section>
 
   <div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
