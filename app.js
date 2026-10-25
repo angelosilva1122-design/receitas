@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '0.9.0';
+const APP_VERSION = '1.0.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -1311,7 +1311,41 @@ $('importFile').addEventListener('change', (e) => {
   if (file) importRecipes(file).catch((err) => { console.error(err); toast('Não foi possível importar'); });
 });
 
+/* ---------- Aparência: claro / escuro / sistema ---------- */
+const THEME_KEY = 'receitas.theme';
+function readTheme() {
+  try { const t = localStorage.getItem(THEME_KEY); return t === 'light' || t === 'dark' ? t : 'system'; } catch { return 'system'; }
+}
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'system') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', theme);
+  // Cor da barra de estado do iPhone
+  const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+    if (theme === 'system') m.setAttribute('content', m.media.includes('dark') ? '#141210' : '#F7F5F2');
+    else m.setAttribute('content', dark ? '#141210' : '#F7F5F2');
+  });
+  document.querySelectorAll('#themePicker button').forEach((b) => {
+    const on = b.dataset.theme === theme;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+}
+$('themePicker').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-theme]');
+  if (!b) return;
+  const theme = b.dataset.theme;
+  try {
+    if (theme === 'system') localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, theme);
+  } catch { /* ignora */ }
+  applyTheme(theme);
+});
+applyTheme(readTheme());
+
 /* ---------- Arranque ---------- */
+$('about').textContent = `Receitas v${APP_VERSION} · As receitas e fotografias ficam guardadas apenas neste telemóvel e funcionam sem internet.`;
 $('version').textContent = `v${APP_VERSION}`;
 loadTaxonomy().then(render).then(() => {
   // Ao reabrir a app com uma receita aberta, volta à lista

@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.0 — 2026-10-25
+Primeira versão completa.
+- Novo ecrã "Definições" (botão da roda dentada): Aparência, Organizar (pratos e categorias), Cópia de segurança e Sobre
+- Aparência: Claro, Escuro ou Sistema (segue o iPhone); a escolha fica guardada
+- Modo escuro em toda a app, incluindo modo cozinhar e barra de estado
+- Ecrã de arranque com o ícone (claro e escuro) para os vários tamanhos de iPhone
+- Funcionamento offline revisto e testado
+- Melhor contraste do texto secundário e botões de porções maiores
+
 ## v0.9.0 — 2026-10-25
 - Fotografia da receita: tirar com a câmara ou escolher da galeria, alterar ou remover
 - Imagens reduzidas automaticamente para poupar espaço no telemóvel
