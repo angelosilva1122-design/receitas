@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.0 — 2026-10-25
+- Novos campos opcionais: tempo de preparação, tempo de cozedura, porções e notas
+- Detalhe mostra os tempos e as porções num resumo, e as notas no fim
+- Lista mostra o tempo total quando existe
+- Backup e importação incluem os novos campos
+
 ## v0.3.0 — 2026-10-25
 - Novo botão de cópia de segurança no topo da lista
 - Exportar todas as receitas para um ficheiro JSON (no iPhone abre a folha de partilha: Guardar em Ficheiros, AirDrop, Mail…)

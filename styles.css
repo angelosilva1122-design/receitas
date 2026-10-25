@@ -247,6 +247,31 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .action-text { display: flex; flex-direction: column; min-width: 0; }
 .action-text small { color: var(--muted); font-size: 14px; margin-top: 1px; }
 
+/* v0.4.0: tempos, porções, notas */
+.field-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.field-row .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unit-input { position: relative; display: block; }
+.unit-input input { padding-right: 42px; }
+.unit-input span {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); font-size: 15px; pointer-events: none;
+}
+textarea.short { min-height: 88px; }
+
+.facts {
+  display: flex;
+  margin-top: 16px; background: var(--surface); border-radius: var(--radius);
+}
+.facts[hidden] { display: none; }
+.fact { flex: 1; padding: 12px 8px; text-align: center; display: flex; flex-direction: column; gap: 2px; position: relative; }
+.fact + .fact::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; border-left: 1px solid var(--line); }
+.fact strong { font-size: 17px; font-weight: 600; }
+.fact span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.notes {
+  margin: 0; padding: 14px 16px; background: var(--surface); border-radius: var(--radius);
+  white-space: pre-line; overflow-wrap: anywhere;
+}
+
 /* Toast */
 .toast {
   position: fixed; left: 50%; bottom: calc(28px + var(--safe-bottom));

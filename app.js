@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -61,8 +61,29 @@ function plural(n, one, many) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+// Minutos → "45 min", "1 h", "1 h 15 min"
+function formatMinutes(m) {
+  if (!m) return '';
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  if (!h) return `${min} min`;
+  return min ? `${h} h ${min} min` : `${h} h`;
+}
+
+// Texto do campo → número inteiro positivo, ou null
+function parseCount(v) {
+  const n = parseInt(String(v).replace(/\D/g, ''), 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 9999) : null;
+}
+
+const totalTime = (r) => (r.prepTime || 0) + (r.cookTime || 0);
+
 function summary(r) {
-  return `${plural(r.ingredients.length, 'ingrediente', 'ingredientes')} · ${plural(r.steps.length, 'passo', 'passos')}`;
+  const parts = [plural(r.ingredients.length, 'ingrediente', 'ingredientes')];
+  const t = totalTime(r);
+  if (t) parts.push(formatMinutes(t));
+  else parts.push(plural(r.steps.length, 'passo', 'passos'));
+  return parts.join(' · ');
 }
 
 let toastTimer;
@@ -146,6 +167,29 @@ let current = null; // receita aberta no detalhe
 function fillDetail(r) {
   $('detailTitle').textContent = r.title;
   $('detailMeta').textContent = summary(r);
+
+  const facts = [
+    ['Preparação', formatMinutes(r.prepTime)],
+    ['Cozedura', formatMinutes(r.cookTime)],
+    ['Porções', r.servings ? String(r.servings) : ''],
+  ].filter(([, v]) => v);
+  const factsEl = $('detailFacts');
+  factsEl.replaceChildren(...facts.map(([label, value]) => {
+    const div = document.createElement('div');
+    div.className = 'fact';
+    const v = document.createElement('strong');
+    v.textContent = value;
+    const l = document.createElement('span');
+    l.textContent = label;
+    div.append(v, l);
+    return div;
+  }));
+  factsEl.hidden = facts.length === 0;
+
+  const notes = (r.notes || '').trim();
+  $('notesTitle').hidden = !notes;
+  $('detailNotes').hidden = !notes;
+  $('detailNotes').textContent = notes;
 
   const ing = $('detailIngredients');
   ing.replaceChildren(...r.ingredients.map((t) => {
@@ -234,11 +278,24 @@ const form = $('form');
 const titleInput = $('title');
 const ingInput = $('ingredients');
 const stepsInput = $('steps');
+const prepInput = $('prepTime');
+const cookInput = $('cookTime');
+const servingsInput = $('servings');
+const notesInput = $('notes');
 const saveBtn = $('saveBtn');
 let editing = null; // receita a editar (null = nova)
 let initial = '';   // estado inicial para detetar alterações
 
-const snapshot = () => [titleInput.value, ingInput.value, stepsInput.value].map((v) => v.trim()).join('\u0000');
+const fields = () => [titleInput, ingInput, stepsInput, prepInput, cookInput, servingsInput, notesInput];
+const snapshot = () => fields().map((el) => el.value.trim()).join('\u0000');
+
+// Campos numéricos: só dígitos
+[prepInput, cookInput, servingsInput].forEach((el) => {
+  el.addEventListener('input', () => {
+    const clean = el.value.replace(/\D/g, '').slice(0, 4);
+    if (clean !== el.value) el.value = clean;
+  });
+});
 
 function openSheet(recipe = null) {
   editing = recipe;
@@ -247,6 +304,10 @@ function openSheet(recipe = null) {
     titleInput.value = recipe.title;
     ingInput.value = recipe.ingredients.join('\n');
     stepsInput.value = recipe.steps.join('\n');
+    prepInput.value = recipe.prepTime || '';
+    cookInput.value = recipe.cookTime || '';
+    servingsInput.value = recipe.servings || '';
+    notesInput.value = recipe.notes || '';
   }
   $('sheetTitle').textContent = recipe ? 'Editar receita' : 'Nova receita';
   initial = snapshot();
@@ -292,6 +353,10 @@ form.addEventListener('submit', async (e) => {
     title,
     ingredients: toLines(ingInput.value),
     steps: toLines(stepsInput.value),
+    prepTime: parseCount(prepInput.value),
+    cookTime: parseCount(cookInput.value),
+    servings: parseCount(servingsInput.value),
+    notes: notesInput.value.trim(),
     updatedAt: now,
   };
   saveBtn.disabled = true;
@@ -424,6 +489,10 @@ function cleanRecipe(raw) {
     title,
     ingredients: strList(raw.ingredients),
     steps: strList(raw.steps),
+    prepTime: parseCount(raw.prepTime ?? ''),
+    cookTime: parseCount(raw.cookTime ?? ''),
+    servings: parseCount(raw.servings ?? ''),
+    notes: typeof raw.notes === 'string' ? raw.notes.trim() : '',
     createdAt: num(raw.createdAt),
     updatedAt: num(raw.updatedAt),
   };

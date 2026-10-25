@@ -54,6 +54,7 @@
     <div class="detail-body">
       <h1 id="detailTitle" class="detail-title"></h1>
       <p id="detailMeta" class="detail-meta"></p>
+      <div id="detailFacts" class="facts" hidden></div>
 
       <h2 class="section-title">Ingredientes</h2>
       <ul id="detailIngredients" class="ingredients"></ul>
@@ -62,6 +63,9 @@
       <h2 class="section-title">Passos</h2>
       <ol id="detailSteps" class="steps"></ol>
       <p id="noSteps" class="none" hidden>Sem passos.</p>
+
+      <h2 id="notesTitle" class="section-title" hidden>Notas</h2>
+      <p id="detailNotes" class="notes" hidden></p>
 
       <button id="deleteBtn" class="delete-btn" type="button">Apagar receita</button>
     </div>
@@ -80,6 +84,20 @@
           <span class="label">Título</span>
           <input id="title" name="title" type="text" placeholder="Ex.: Bolo de laranja" enterkeyhint="next" maxlength="120">
         </label>
+        <div class="field-row">
+          <label class="field">
+            <span class="label">Preparação</span>
+            <span class="unit-input"><input id="prepTime" name="prepTime" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="15"><span>min</span></span>
+          </label>
+          <label class="field">
+            <span class="label">Cozedura</span>
+            <span class="unit-input"><input id="cookTime" name="cookTime" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="40"><span>min</span></span>
+          </label>
+          <label class="field">
+            <span class="label">Porções</span>
+            <input id="servings" name="servings" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="4">
+          </label>
+        </div>
         <label class="field">
           <span class="label">Ingredientes <small>um por linha</small></span>
           <textarea id="ingredients" name="ingredients" rows="6" placeholder="200 g de farinha&#10;3 ovos&#10;1 laranja"></textarea>
@@ -87,6 +105,10 @@
         <label class="field">
           <span class="label">Passos <small>um por linha</small></span>
           <textarea id="steps" name="steps" rows="6" placeholder="Pré-aquecer o forno a 180 °C.&#10;Bater os ovos com o açúcar.&#10;Juntar a farinha e levar ao forno."></textarea>
+        </label>
+        <label class="field">
+          <span class="label">Notas <small>opcional</small></span>
+          <textarea id="notes" name="notes" rows="3" class="short" placeholder="Dicas, variações, onde comprar…"></textarea>
         </label>
       </form>
     </div>
