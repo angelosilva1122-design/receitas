@@ -1,5 +1,5 @@
 // Atualizar CACHE em cada versão publicada
-const CACHE = 'receitas-v0.7.0';
+const CACHE = 'receitas-v0.8.0';
 const ASSETS = [
   './',
   './index.html',

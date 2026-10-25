@@ -429,6 +429,36 @@ h3.label { margin: 0; }
 .cook-primary:active, .cook-secondary:active { transform: scale(.98); }
 .awake-note { margin: 10px 0 0; text-align: center; color: var(--muted); font-size: 13px; }
 
+/* v0.8.0: ajuste de porções */
+.stepper { display: inline-flex; align-items: center; gap: 4px; }
+.stepper button {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 20px; line-height: 1; font-weight: 500;
+  display: grid; place-items: center;
+}
+.stepper button:disabled { opacity: .35; }
+.stepper button:active:not(:disabled) { transform: scale(.9); }
+.stepper strong { min-width: 28px; text-align: center; font-size: 17px; font-weight: 600; }
+.stepper.changed strong { color: var(--accent); }
+.fact.servings { align-items: center; gap: 4px; padding-top: 8px; padding-bottom: 10px; }
+.servings-reset {
+  display: block; margin: 8px auto 0; padding: 4px 8px;
+  color: var(--accent); font-size: 14px;
+}
+.servings-reset[hidden] { display: none; }
+.qty { font-weight: 700; color: var(--accent); }
+.cook-ing.done .qty { color: inherit; }
+.cook-servings {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); border-radius: var(--radius); padding: 10px 16px;
+  font-size: 17px; color: var(--muted);
+}
+.cook-servings[hidden] { display: none; }
+.cook-servings .stepper button { width: 36px; height: 36px; font-size: 22px; }
+.cook-servings .stepper strong { font-size: 20px; color: var(--ink); min-width: 34px; }
+.cook-servings .stepper.changed strong { color: var(--accent); }
+
 /* Toast */
 .toast {
   position: fixed; left: 50%; bottom: calc(28px + var(--safe-bottom));

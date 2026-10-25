@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '0.7.0';
+const APP_VERSION = '0.8.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -142,6 +142,90 @@ function summary(r) {
     ? [r.dish, t ? formatMinutes(t) : plural(r.ingredients.length, 'ingrediente', 'ingredientes')]
     : [plural(r.ingredients.length, 'ingrediente', 'ingredientes'), t ? formatMinutes(t) : plural(r.steps.length, 'passo', 'passos')];
   return parts.join(' · ');
+}
+
+/* ---------- Ajuste de porções ---------- */
+const FRACTIONS = { '½': 0.5, '⅓': 1 / 3, '⅔': 2 / 3, '¼': 0.25, '¾': 0.75, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875 };
+const NICE = [[0.125, '⅛'], [0.25, '¼'], [1 / 3, '⅓'], [0.5, '½'], [2 / 3, '⅔'], [0.75, '¾']];
+const FR = '½⅓⅔¼¾⅛⅜⅝⅞';
+// Uma quantidade: "2", "1,5", "0.5", "1/2", "½", "1 ½", "1 1/2", e intervalos "2-3" / "2 a 3"
+const NUM = `(?:\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d+(?:[.,]\\d+)?(?:\\s*[${FR}])?|[${FR}])`;
+const QTY_RE = new RegExp(`(^|[^\\p{L}\\d.,/])(${NUM})(?:(\\s*(?:-|–|a)\\s*)(${NUM}))?(?![\\d/]|[.,]\\d)`, 'u');
+
+function parseNum(t) {
+  t = t.trim();
+  let total = 0;
+  const frac = t.match(new RegExp(`[${FR}]$`));
+  if (frac) { total += FRACTIONS[frac[0]]; t = t.slice(0, -1).trim(); }
+  const mixed = t.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+  if (mixed) return total + Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
+  const simple = t.match(/^(\d+)\/(\d+)$/);
+  if (simple) return total + Number(simple[1]) / Number(simple[2]);
+  if (t) total += Number(t.replace(',', '.'));
+  return total;
+}
+
+function formatNum(v, decimal = false) {
+  if (v >= 10) return String(Math.round(v));
+  if (decimal) return String(Math.round(v * 100) / 100).replace('.', ',');
+  const whole = Math.floor(v);
+  const rest = v - whole;
+  if (rest < 0.03) return String(whole);
+  if (rest > 0.97) return String(whole + 1);
+  for (const [n, sym] of NICE) {
+    if (Math.abs(rest - n) < 0.04) return whole ? `${whole} ${sym}` : sym;
+  }
+  return (Math.round(v * 10) / 10).toString().replace('.', ',');
+}
+
+// Devolve a linha dividida em [antes, quantidade, depois] já ajustada ao fator
+function scaleLine(line, factor) {
+  if (factor === 1) return [line, '', ''];
+  const m = line.match(QTY_RE);
+  if (!m) return [line, '', ''];
+  const start = m.index + m[1].length;
+  const a = parseNum(m[2]);
+  if (!a && a !== 0) return [line, '', ''];
+  const dec = /[.,]/.test(m[2]); // "1,5 kg" continua em decimal
+  let qty = formatNum(a * factor, dec);
+  if (m[4]) qty += m[3] + formatNum(parseNum(m[4]) * factor, dec);
+  return [line.slice(0, start), qty, line.slice(m.index + m[0].length)];
+}
+
+// Preenche um elemento com a linha, destacando a quantidade ajustada
+function fillLine(el, line, factor) {
+  const [before, qty, after] = scaleLine(line, factor);
+  if (!qty) { el.textContent = line; return; }
+  const strong = document.createElement('strong');
+  strong.className = 'qty';
+  strong.textContent = qty;
+  el.replaceChildren(before, strong, after);
+}
+
+let viewServings = null; // porções escolhidas para a receita aberta
+const scaleFactor = (r) => (r && r.servings && viewServings ? viewServings / r.servings : 1);
+
+// Controlo − N +
+function servingsStepper(r, onChange) {
+  const wrap = document.createElement('div');
+  wrap.className = 'stepper';
+  const minus = document.createElement('button');
+  minus.type = 'button';
+  minus.textContent = '−';
+  minus.setAttribute('aria-label', 'Menos porções');
+  const value = document.createElement('strong');
+  value.textContent = viewServings;
+  const plus = document.createElement('button');
+  plus.type = 'button';
+  plus.textContent = '+';
+  plus.setAttribute('aria-label', 'Mais porções');
+  minus.disabled = viewServings <= 1;
+  plus.disabled = viewServings >= 99;
+  minus.addEventListener('click', () => { viewServings = Math.max(1, viewServings - 1); onChange(); });
+  plus.addEventListener('click', () => { viewServings = Math.min(99, viewServings + 1); onChange(); });
+  wrap.append(minus, value, plus);
+  wrap.classList.toggle('changed', viewServings !== r.servings);
+  return wrap;
 }
 
 // Botão "chip" reutilizável
@@ -372,10 +456,13 @@ function fillDetail(r) {
   );
   tags.hidden = !tags.children.length;
 
+  if (!r.servings) viewServings = null;
+  else if (!viewServings) viewServings = r.servings;
+  const factor = scaleFactor(r);
+
   const facts = [
     ['Preparação', formatMinutes(r.prepTime)],
     ['Cozedura', formatMinutes(r.cookTime)],
-    ['Porções', r.servings ? String(r.servings) : ''],
   ].filter(([, v]) => v);
   const factsEl = $('detailFacts');
   factsEl.replaceChildren(...facts.map(([label, value]) => {
@@ -388,7 +475,19 @@ function fillDetail(r) {
     div.append(v, l);
     return div;
   }));
-  factsEl.hidden = facts.length === 0;
+  if (r.servings) {
+    const div = document.createElement('div');
+    div.className = 'fact servings';
+    const l = document.createElement('span');
+    l.textContent = 'Porções';
+    div.append(servingsStepper(r, () => fillDetail(current)), l);
+    factsEl.append(div);
+  }
+  factsEl.hidden = !factsEl.children.length;
+
+  const reset = $('servingsReset');
+  reset.hidden = factor === 1;
+  reset.textContent = `Quantidades para ${plural(viewServings || 0, 'porção', 'porções')} · repor ${r.servings}`;
 
   const notes = (r.notes || '').trim();
   $('notesTitle').hidden = !notes;
@@ -398,7 +497,7 @@ function fillDetail(r) {
   const ing = $('detailIngredients');
   ing.replaceChildren(...r.ingredients.map((t) => {
     const li = document.createElement('li');
-    li.textContent = t;
+    fillLine(li, t, factor);
     return li;
   }));
   ing.hidden = r.ingredients.length === 0;
@@ -421,6 +520,7 @@ async function showDetail(id) {
     hideDetail();
     return false;
   }
+  if (!current || current.id !== r.id) viewServings = null; // nova receita: porções originais
   current = r;
   fillDetail(r);
   if (detail.hidden) {
@@ -466,6 +566,11 @@ window.addEventListener('popstate', async () => {
 });
 
 $('backBtn').addEventListener('click', goBack);
+$('servingsReset').addEventListener('click', () => {
+  if (!current) return;
+  viewServings = current.servings;
+  fillDetail(current);
+});
 
 /* ---------- Modo cozinhar ---------- */
 const cook = $('cook');
@@ -523,11 +628,20 @@ function renderCook() {
     box.className = 'box';
     box.setAttribute('aria-hidden', 'true');
     const txt = document.createElement('span');
-    txt.textContent = t;
+    fillLine(txt, t, scaleFactor(r));
     b.append(box, txt);
     return b;
   }));
   $('toSteps').hidden = !hasSteps;
+  const cs = $('cookServings');
+  if (r.servings) {
+    const label = document.createElement('span');
+    label.textContent = 'Porções';
+    cs.replaceChildren(label, servingsStepper(r, () => { renderCook(); fillDetail(current); }));
+    cs.hidden = false;
+  } else {
+    cs.hidden = true;
+  }
 
   // Passos
   $('cookSteps').hidden = cookState.tab !== 'steps';
@@ -809,6 +923,7 @@ form.addEventListener('submit', async (e) => {
     await render();
     if (editing) {
       current = recipe;
+      viewServings = null; // depois de editar, volta às porções da receita
       fillDetail(recipe);
       toast('Alterações guardadas');
     } else {

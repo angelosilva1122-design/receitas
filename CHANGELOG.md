@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.0 — 2026-10-25
+- Ajuste de porções com botões − / + no detalhe e no modo cozinhar
+- As quantidades dos ingredientes são recalculadas e destacadas (inteiros, decimais, frações como ½ e ¾, e intervalos como 2-3)
+- Ingredientes sem quantidade (ex.: sal q.b.) ficam iguais
+- Botão para repor as porções originais
+
 ## v0.7.0 — 2026-10-25
 - Modo cozinhar: botão "Cozinhar" no detalhe abre um ecrã próprio com letra grande
 - Ecrã mantém-se ligado enquanto se cozinha (iOS 16.4 ou mais recente)
