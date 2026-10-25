@@ -23,6 +23,7 @@ App minimalista para guardar receitas no iPhone, inspirada na Recipe Keeper.
 | v0.8.0 | Ajuste de porções |
 | v0.9.0 | Fotografias (incluídas no backup) |
 | v1.0.0 | Definições com aparência (claro/escuro/sistema), modo escuro, ecrã de arranque e offline revisto |
+| v1.1.0 | Aba de nutrição *(planeada — detalhes a definir)* |
 
 Versões `x.y.Z` são correções de bugs.
 
