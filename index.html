@@ -18,8 +18,8 @@
   <header class="topbar">
     <h1>Receitas</h1>
     <div class="top-actions">
-      <button id="backupBtn" class="round-btn soft" type="button" aria-label="Cópia de segurança">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      <button id="backupBtn" class="round-btn soft" type="button" aria-label="Organizar e cópia de segurança">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="16" cy="7" r="2.2" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="10" cy="17" r="2.2" stroke="currentColor" stroke-width="2" fill="none"/></svg>
       </button>
       <button id="addBtn" class="round-btn" type="button" aria-label="Nova receita">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
@@ -28,8 +28,24 @@
   </header>
 
   <main>
-    <p id="count" class="count" hidden></p>
+    <div id="tools" class="tools" hidden>
+      <label class="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="search" type="search" placeholder="Pesquisar nome, ingrediente…" enterkeyhint="search" autocomplete="off" autocorrect="off" aria-label="Pesquisar receitas">
+      </label>
+      <div id="dishFilters" class="chips scroll" aria-label="Filtrar por prato"></div>
+      <div id="catFilters" class="chips scroll" aria-label="Filtrar por categoria"></div>
+    </div>
+    <div class="count-row">
+      <p id="count" class="count" hidden></p>
+      <button id="clearFilters" class="text-btn small" type="button" hidden>Limpar filtros</button>
+    </div>
     <ul id="list" class="list"></ul>
+
+    <section id="noResults" class="empty compact" hidden>
+      <h2>Nenhuma receita encontrada</h2>
+      <p>Experimenta outra palavra ou <button id="noResultsClear" class="link-btn" type="button">limpa os filtros</button>.</p>
+    </section>
 
     <section id="empty" class="empty" hidden>
       <svg viewBox="0 0 64 64" width="56" height="56" aria-hidden="true">
@@ -54,6 +70,7 @@
     <div class="detail-body">
       <h1 id="detailTitle" class="detail-title"></h1>
       <p id="detailMeta" class="detail-meta"></p>
+      <div id="detailTags" class="pills" hidden></div>
       <div id="detailFacts" class="facts" hidden></div>
 
       <h2 class="section-title">Ingredientes</h2>
@@ -84,6 +101,14 @@
           <span class="label">Título</span>
           <input id="title" name="title" type="text" placeholder="Ex.: Bolo de laranja" enterkeyhint="next" maxlength="120">
         </label>
+        <div class="field">
+          <span class="label">Prato</span>
+          <div id="formDish" class="chips wrap"></div>
+        </div>
+        <div class="field">
+          <span class="label">Categorias <small>podes escolher várias</small></span>
+          <div id="formCats" class="chips wrap"></div>
+        </div>
         <div class="field-row">
           <label class="field">
             <span class="label">Preparação</span>
@@ -116,13 +141,24 @@
 
   <div id="backupSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="backupTitle" hidden>
     <div class="sheet-backdrop" data-close></div>
-    <div class="sheet-panel compact">
+    <div class="sheet-panel">
       <div class="sheet-bar">
         <span></span>
-        <span id="backupTitle" class="sheet-title">Cópia de segurança</span>
+        <span id="backupTitle" class="sheet-title">Organizar</span>
         <button id="backupClose" class="text-btn strong" type="button">OK</button>
       </div>
       <div class="sheet-body">
+        <section class="set-section">
+          <h3 class="label">Pratos</h3>
+          <div id="setDishes" class="chips wrap"></div>
+        </section>
+        <section class="set-section">
+          <h3 class="label">Categorias</h3>
+          <div id="setCats" class="chips wrap"></div>
+        </section>
+        <p class="set-hint">Toca num prato ou categoria para o remover.</p>
+
+        <h3 class="label set-title">Cópia de segurança</h3>
         <p class="backup-info">As receitas vivem só neste telemóvel. Exporta uma cópia de vez em quando e guarda-a em <strong>Ficheiros</strong> ou no iCloud Drive.</p>
         <p id="lastBackup" class="backup-last"></p>
         <div class="action-list">

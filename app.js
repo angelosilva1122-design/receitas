@@ -1,11 +1,12 @@
 'use strict';
 
-const APP_VERSION = '0.4.0';
+const APP_VERSION = '0.5.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'recipes';
+const SETTINGS = 'settings';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -15,6 +16,9 @@ function openDB() {
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains(SETTINGS)) {
+        db.createObjectStore(SETTINGS, { keyPath: 'key' });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -23,11 +27,11 @@ function openDB() {
 
 const dbReady = openDB();
 
-async function tx(mode, fn) {
+async function tx(mode, fn, store = STORE) {
   const db = await dbReady;
   return new Promise((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const result = fn(t.objectStore(STORE));
+    const t = db.transaction(store, mode);
+    const result = fn(t.objectStore(store));
     t.oncomplete = () => resolve(result && 'result' in result ? result.result : result);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error);
@@ -39,6 +43,39 @@ const getRecipe = (id) => tx('readonly', (s) => s.get(id));
 const saveRecipe = (recipe) => tx('readwrite', (s) => { s.put(recipe); }).then(() => recipe);
 const deleteRecipe = (id) => tx('readwrite', (s) => { s.delete(id); });
 const saveMany = (recipes) => tx('readwrite', (s) => { recipes.forEach((r) => s.put(r)); });
+
+/* ---------- Pratos e categorias ---------- */
+const DEFAULT_DISHES = ['Entradas', 'Sopas', 'Prato Principal', 'Sobremesa', 'Bebidas'];
+const DEFAULT_CATEGORIES = ['carne', 'peixe', 'vegetariano', 'arroz', 'massa', 'batata', 'italiano', 'bolo'];
+
+// Comparação sem acentos nem maiúsculas ("Sopa" = "sopa", "Pão" = "pao")
+const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const sameName = (a, b) => norm(a) === norm(b);
+const byName = (a, b) => a.localeCompare(b, 'pt', { sensitivity: 'base' });
+
+let taxonomy = { dishes: [...DEFAULT_DISHES], categories: [...DEFAULT_CATEGORIES] };
+
+async function loadTaxonomy() {
+  try {
+    const saved = await tx('readonly', (s) => s.get('taxonomy'), SETTINGS);
+    if (saved) taxonomy = { dishes: saved.dishes || [], categories: saved.categories || [] };
+    else await saveTaxonomy(); // primeira vez: grava as listas iniciais
+  } catch (e) { console.error(e); }
+}
+
+function saveTaxonomy() {
+  return tx('readwrite', (s) => { s.put({ key: 'taxonomy', ...taxonomy }); }, SETTINGS);
+}
+
+// Junta nomes a uma lista sem duplicar; devolve o nome tal como ficou guardado
+function addName(list, name) {
+  const clean = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!clean) return null;
+  const found = list.find((x) => sameName(x, clean));
+  if (found) return found;
+  list.push(clean);
+  return clean;
+}
 
 // Pede ao browser para não apagar os dados automaticamente
 if (navigator.storage && navigator.storage.persist) {
@@ -79,11 +116,23 @@ function parseCount(v) {
 const totalTime = (r) => (r.prepTime || 0) + (r.cookTime || 0);
 
 function summary(r) {
-  const parts = [plural(r.ingredients.length, 'ingrediente', 'ingredientes')];
   const t = totalTime(r);
-  if (t) parts.push(formatMinutes(t));
-  else parts.push(plural(r.steps.length, 'passo', 'passos'));
+  const parts = r.dish
+    ? [r.dish, t ? formatMinutes(t) : plural(r.ingredients.length, 'ingrediente', 'ingredientes')]
+    : [plural(r.ingredients.length, 'ingrediente', 'ingredientes'), t ? formatMinutes(t) : plural(r.steps.length, 'passo', 'passos')];
   return parts.join(' · ');
+}
+
+// Botão "chip" reutilizável
+function chip(text, { active = false, cls = '', data = {} } = {}) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = `chip ${cls}`.trim();
+  b.textContent = text;
+  b.setAttribute('aria-pressed', String(active));
+  if (active) b.classList.add('on');
+  Object.entries(data).forEach(([k, v]) => { b.dataset[k] = v; });
+  return b;
 }
 
 let toastTimer;
@@ -95,21 +144,50 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
 }
 
-/* ---------- Lista ---------- */
-async function render() {
-  let recipes = [];
-  try {
-    recipes = await getAllRecipes();
-  } catch (e) {
-    toast('Erro ao ler as receitas');
-    console.error(e);
-  }
-  recipes.sort((a, b) => a.title.localeCompare(b.title, 'pt', { sensitivity: 'base' }));
+/* ---------- Lista, pesquisa e filtros ---------- */
+const filters = { q: '', dish: null, cats: new Set() };
+let allRecipes = [];
 
+function matches(r) {
+  if (filters.dish && r.dish !== filters.dish) return false;
+  const cats = r.categories || [];
+  for (const c of filters.cats) if (!cats.includes(c)) return false;
+  if (filters.q) {
+    const words = norm(filters.q).split(/\s+/).filter(Boolean);
+    const hay = norm([r.title, r.dish || '', cats.join(' '), r.ingredients.join(' ')].join(' '));
+    if (!words.every((w) => hay.includes(w))) return false;
+  }
+  return true;
+}
+
+function renderFilters() {
+  const usedDishes = new Set(allRecipes.map((r) => r.dish).filter(Boolean));
+  const usedCats = new Set(allRecipes.flatMap((r) => r.categories || []));
+  // Limpa filtros que deixaram de existir
+  if (filters.dish && !usedDishes.has(filters.dish)) filters.dish = null;
+  for (const c of [...filters.cats]) if (!usedCats.has(c)) filters.cats.delete(c);
+
+  const dishes = taxonomy.dishes.filter((d) => usedDishes.has(d));
+  const cats = taxonomy.categories.filter((c) => usedCats.has(c)).sort(byName);
+
+  const dRow = $('dishFilters');
+  dRow.replaceChildren(
+    chip('Todos', { active: !filters.dish, data: { dish: '' } }),
+    ...dishes.map((d) => chip(d, { active: filters.dish === d, data: { dish: d } })),
+  );
+  dRow.hidden = dishes.length === 0;
+
+  const cRow = $('catFilters');
+  cRow.replaceChildren(...cats.map((c) => chip(c, { active: filters.cats.has(c), cls: 'tag', data: { cat: c } })));
+  cRow.hidden = cats.length === 0;
+}
+
+function renderList() {
+  const shown = allRecipes.filter(matches);
   const list = $('list');
   list.replaceChildren();
 
-  for (const r of recipes) {
+  for (const r of shown) {
     const li = document.createElement('li');
     li.className = 'row';
     li.tabIndex = 0;
@@ -143,10 +221,64 @@ async function render() {
     list.append(li);
   }
 
-  $('empty').hidden = recipes.length > 0;
-  $('count').hidden = recipes.length === 0;
-  $('count').textContent = plural(recipes.length, 'receita', 'receitas');
+  const total = allRecipes.length;
+  const filtering = Boolean(filters.q.trim() || filters.dish || filters.cats.size);
+  $('empty').hidden = total > 0;
+  $('tools').hidden = total === 0;
+  $('noResults').hidden = !(total > 0 && shown.length === 0);
+  $('count').hidden = total === 0;
+  $('count').textContent = filtering
+    ? `${shown.length} de ${plural(total, 'receita', 'receitas')}`
+    : plural(total, 'receita', 'receitas');
+  $('clearFilters').hidden = !filtering;
 }
+
+async function render() {
+  try {
+    allRecipes = await getAllRecipes();
+  } catch (e) {
+    allRecipes = [];
+    toast('Erro ao ler as receitas');
+    console.error(e);
+  }
+  allRecipes.sort((a, b) => byName(a.title, b.title));
+  renderFilters();
+  renderList();
+}
+
+$('search').addEventListener('input', (e) => {
+  filters.q = e.target.value;
+  renderList();
+});
+$('search').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') e.target.blur();
+});
+$('dishFilters').addEventListener('click', (e) => {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  const d = b.dataset.dish;
+  filters.dish = !d || filters.dish === d ? null : d;
+  renderFilters();
+  renderList();
+});
+$('catFilters').addEventListener('click', (e) => {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  const c = b.dataset.cat;
+  if (filters.cats.has(c)) filters.cats.delete(c); else filters.cats.add(c);
+  renderFilters();
+  renderList();
+});
+function clearFilters() {
+  filters.q = '';
+  filters.dish = null;
+  filters.cats.clear();
+  $('search').value = '';
+  renderFilters();
+  renderList();
+}
+$('clearFilters').addEventListener('click', clearFilters);
+$('noResultsClear').addEventListener('click', clearFilters);
 
 $('list').addEventListener('click', (e) => {
   const row = e.target.closest('.row');
@@ -166,7 +298,14 @@ let current = null; // receita aberta no detalhe
 
 function fillDetail(r) {
   $('detailTitle').textContent = r.title;
-  $('detailMeta').textContent = summary(r);
+  $('detailMeta').textContent = summary({ ...r, dish: null }); // o prato aparece na etiqueta
+
+  const tags = $('detailTags');
+  tags.replaceChildren(
+    ...(r.dish ? [Object.assign(document.createElement('span'), { className: 'pill dish', textContent: r.dish })] : []),
+    ...(r.categories || []).map((c) => Object.assign(document.createElement('span'), { className: 'pill', textContent: c })),
+  );
+  tags.hidden = !tags.children.length;
 
   const facts = [
     ['Preparação', formatMinutes(r.prepTime)],
@@ -285,9 +424,62 @@ const notesInput = $('notes');
 const saveBtn = $('saveBtn');
 let editing = null; // receita a editar (null = nova)
 let initial = '';   // estado inicial para detetar alterações
+let formDish = null;
+let formCats = new Set();
 
 const fields = () => [titleInput, ingInput, stepsInput, prepInput, cookInput, servingsInput, notesInput];
-const snapshot = () => fields().map((el) => el.value.trim()).join('\u0000');
+const snapshot = () => [...fields().map((el) => el.value.trim()), formDish || '', [...formCats].sort().join('|')].join('\u0000');
+
+function renderFormChips() {
+  $('formDish').replaceChildren(
+    ...taxonomy.dishes.map((d) => chip(d, { active: formDish === d, data: { dish: d } })),
+    chip('+ Novo', { cls: 'add', data: { add: 'dish' } }),
+  );
+  $('formCats').replaceChildren(
+    ...[...taxonomy.categories].sort(byName).map((c) => chip(c, { active: formCats.has(c), cls: 'tag', data: { cat: c } })),
+    chip('+ Nova', { cls: 'add', data: { add: 'cat' } }),
+  );
+}
+
+async function askNewName(kind) {
+  const isDish = kind === 'dish';
+  const name = prompt(isDish ? 'Novo prato' : 'Nova categoria');
+  if (name === null) return null;
+  const list = isDish ? taxonomy.dishes : taxonomy.categories;
+  const before = list.length;
+  const saved = addName(list, name);
+  if (!saved) return null;
+  if (list.length !== before) {
+    try { await saveTaxonomy(); } catch (e) { console.error(e); }
+    renderSettings();
+  }
+  return saved;
+}
+
+$('formDish').addEventListener('click', async (e) => {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  if (b.dataset.add) {
+    const name = await askNewName('dish');
+    if (name) formDish = name;
+  } else {
+    formDish = formDish === b.dataset.dish ? null : b.dataset.dish;
+  }
+  renderFormChips();
+});
+
+$('formCats').addEventListener('click', async (e) => {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  if (b.dataset.add) {
+    const name = await askNewName('cat');
+    if (name) formCats.add(name);
+  } else {
+    const c = b.dataset.cat;
+    if (formCats.has(c)) formCats.delete(c); else formCats.add(c);
+  }
+  renderFormChips();
+});
 
 // Campos numéricos: só dígitos
 [prepInput, cookInput, servingsInput].forEach((el) => {
@@ -300,6 +492,10 @@ const snapshot = () => fields().map((el) => el.value.trim()).join('\u0000');
 function openSheet(recipe = null) {
   editing = recipe;
   form.reset();
+  formDish = recipe && recipe.dish ? recipe.dish : null;
+  formCats = new Set(recipe && recipe.categories ? recipe.categories : []);
+  renderFormChips();
+  $('sheet').querySelector('.sheet-body').scrollTop = 0;
   if (recipe) {
     titleInput.value = recipe.title;
     ingInput.value = recipe.ingredients.join('\n');
@@ -357,6 +553,8 @@ form.addEventListener('submit', async (e) => {
     cookTime: parseCount(cookInput.value),
     servings: parseCount(servingsInput.value),
     notes: notesInput.value.trim(),
+    dish: formDish,
+    categories: [...formCats].sort(byName),
     updatedAt: now,
   };
   saveBtn.disabled = true;
@@ -416,8 +614,65 @@ async function refreshBackupInfo() {
     : `Cria um ficheiro com ${plural(count, 'receita', 'receitas')}`;
 }
 
+/* ---------- Organizar: gerir pratos e categorias ---------- */
+function renderSettings() {
+  const make = (list, kind) => [
+    ...(kind === 'cat' ? [...list].sort(byName) : list).map((name) => {
+      const b = chip(name, { cls: `removable${kind === 'cat' ? ' tag' : ''}`, data: { remove: kind, name } });
+      b.setAttribute('aria-label', `Remover ${name}`);
+      const x = document.createElement('span');
+      x.className = 'x';
+      x.setAttribute('aria-hidden', 'true');
+      x.textContent = '×';
+      b.append(x);
+      return b;
+    }),
+    chip(kind === 'dish' ? '+ Adicionar prato' : '+ Adicionar categoria', { cls: 'add', data: { add: kind } }),
+  ];
+  $('setDishes').replaceChildren(...make(taxonomy.dishes, 'dish'));
+  $('setCats').replaceChildren(...make(taxonomy.categories, 'cat'));
+}
+
+async function removeName(kind, name) {
+  const isDish = kind === 'dish';
+  const used = allRecipes.filter((r) => (isDish ? r.dish === name : (r.categories || []).includes(name)));
+  const what = isDish ? 'prato' : 'categoria';
+  let msg = `Remover ${isDish ? 'o prato' : 'a categoria'} "${name}"?`;
+  if (used.length) msg += `\n${plural(used.length, 'receita deixa', 'receitas deixam')} de ter ${isDish ? 'este' : 'esta'} ${what}. As receitas não são apagadas.`;
+  if (!confirm(msg)) return;
+
+  if (isDish) taxonomy.dishes = taxonomy.dishes.filter((d) => d !== name);
+  else taxonomy.categories = taxonomy.categories.filter((c) => c !== name);
+  const now = Date.now();
+  const changed = used.map((r) => (isDish
+    ? { ...r, dish: null, updatedAt: now }
+    : { ...r, categories: r.categories.filter((c) => c !== name), updatedAt: now }));
+  try {
+    await saveTaxonomy();
+    if (changed.length) await saveMany(changed);
+  } catch (e) {
+    console.error(e);
+    toast('Não foi possível remover');
+  }
+  renderSettings();
+  await render();
+  refreshBackupInfo(); // atualiza a cópia pronta a exportar
+  toast(`"${name}" removid${isDish ? 'o' : 'a'}`);
+}
+
+function onSettingsClick(e) {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  if (b.dataset.add) askNewName(b.dataset.add).then((n) => { if (n) toast(`"${n}" adicionad${b.dataset.add === 'dish' ? 'o' : 'a'}`); });
+  else if (b.dataset.remove) removeName(b.dataset.remove, b.dataset.name);
+}
+$('setDishes').addEventListener('click', onSettingsClick);
+$('setCats').addEventListener('click', onSettingsClick);
+
 function openBackup() {
+  renderSettings();
   refreshBackupInfo();
+  backupSheet.querySelector('.sheet-body').scrollTop = 0;
   backupSheet.hidden = false;
   void backupSheet.offsetHeight;
   backupSheet.classList.add('open');
@@ -445,9 +700,11 @@ async function exportRecipes() {
   const now = new Date();
   const data = {
     format: BACKUP_FORMAT,
-    formatVersion: 1,
+    formatVersion: 2,
     appVersion: APP_VERSION,
     exportedAt: now.toISOString(),
+    dishes: taxonomy.dishes,
+    categories: taxonomy.categories,
     recipes,
   };
   const stamp = now.toISOString().slice(0, 10);
@@ -493,6 +750,8 @@ function cleanRecipe(raw) {
     cookTime: parseCount(raw.cookTime ?? ''),
     servings: parseCount(raw.servings ?? ''),
     notes: typeof raw.notes === 'string' ? raw.notes.trim() : '',
+    dish: typeof raw.dish === 'string' && raw.dish.trim() ? raw.dish.trim() : null,
+    categories: strList(raw.categories),
     createdAt: num(raw.createdAt),
     updatedAt: num(raw.updatedAt),
   };
@@ -517,6 +776,18 @@ async function importRecipes(file) {
     return;
   }
   if (!confirm(`Importar ${plural(incoming.length, 'receita', 'receitas')}?\nAs receitas que já tens mantêm-se.`)) return;
+
+  // Junta os pratos e categorias do ficheiro às listas atuais
+  if (!Array.isArray(data)) {
+    strList(data.dishes).forEach((d) => addName(taxonomy.dishes, d));
+    strList(data.categories).forEach((c) => addName(taxonomy.categories, c));
+  }
+  for (const r of incoming) {
+    r.dish = r.dish ? addName(taxonomy.dishes, r.dish) : null;
+    r.categories = [...new Set(r.categories.map((c) => addName(taxonomy.categories, c)).filter(Boolean))].sort(byName);
+  }
+  await saveTaxonomy();
+  renderSettings();
 
   const current = await getAllRecipes();
   const existing = new Map(current.map((r) => [r.id, r]));
@@ -561,7 +832,7 @@ $('importFile').addEventListener('change', (e) => {
 
 /* ---------- Arranque ---------- */
 $('version').textContent = `v${APP_VERSION}`;
-render().then(() => {
+loadTaxonomy().then(render).then(() => {
   // Ao reabrir a app com uma receita aberta, volta à lista
   if (location.hash) history.replaceState(null, '', location.pathname);
 });

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.0 — 2026-10-25
+- Cada receita pode ter um prato (Entradas, Sopas, Prato Principal, Sobremesa, Bebidas) e várias categorias (carne, peixe, vegetariano, arroz, massa, batata, italiano, bolo)
+- Pratos e categorias escolhem-se no formulário, com opção de criar novos na hora
+- Novo ecrã "Organizar" para adicionar e remover pratos e categorias (junto com a cópia de segurança)
+- Pesquisa por nome, ingrediente, prato ou categoria (ignora acentos e maiúsculas)
+- Filtros na lista: um prato e uma ou mais categorias
+- Backup inclui as listas de pratos e categorias
+
 ## v0.4.0 — 2026-10-25
 - Novos campos opcionais: tempo de preparação, tempo de cozedura, porções e notas
 - Detalhe mostra os tempos e as porções num resumo, e as notas no fim
