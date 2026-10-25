@@ -38,6 +38,30 @@
 
   <footer class="version" id="version"></footer>
 
+  <section id="detail" class="detail" aria-labelledby="detailTitle" hidden>
+    <div class="detail-bar">
+      <button id="backBtn" class="text-btn back" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        Receitas
+      </button>
+      <button id="editBtn" class="text-btn strong" type="button">Editar</button>
+    </div>
+    <div class="detail-body">
+      <h1 id="detailTitle" class="detail-title"></h1>
+      <p id="detailMeta" class="detail-meta"></p>
+
+      <h2 class="section-title">Ingredientes</h2>
+      <ul id="detailIngredients" class="ingredients"></ul>
+      <p id="noIngredients" class="none" hidden>Sem ingredientes.</p>
+
+      <h2 class="section-title">Passos</h2>
+      <ol id="detailSteps" class="steps"></ol>
+      <p id="noSteps" class="none" hidden>Sem passos.</p>
+
+      <button id="deleteBtn" class="delete-btn" type="button">Apagar receita</button>
+    </div>
+  </section>
+
   <div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel">

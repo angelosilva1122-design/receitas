@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.2.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -23,25 +23,21 @@ function openDB() {
 
 const dbReady = openDB();
 
-async function getAllRecipes() {
+async function tx(mode, fn) {
   const db = await dbReady;
   return new Promise((resolve, reject) => {
-    const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => reject(req.error);
+    const t = db.transaction(STORE, mode);
+    const result = fn(t.objectStore(STORE));
+    t.oncomplete = () => resolve(result && 'result' in result ? result.result : result);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
   });
 }
 
-async function saveRecipe(recipe) {
-  const db = await dbReady;
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(recipe);
-    tx.oncomplete = () => resolve(recipe);
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
-  });
-}
+const getAllRecipes = () => tx('readonly', (s) => s.getAll()).then((r) => r || []);
+const getRecipe = (id) => tx('readonly', (s) => s.get(id));
+const saveRecipe = (recipe) => tx('readwrite', (s) => { s.put(recipe); }).then(() => recipe);
+const deleteRecipe = (id) => tx('readwrite', (s) => { s.delete(id); });
 
 // Pede ao browser para não apagar os dados automaticamente
 if (navigator.storage && navigator.storage.persist) {
@@ -62,6 +58,10 @@ function toLines(text) {
 
 function plural(n, one, many) {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+function summary(r) {
+  return `${plural(r.ingredients.length, 'ingrediente', 'ingredientes')} · ${plural(r.steps.length, 'passo', 'passos')}`;
 }
 
 let toastTimer;
@@ -90,6 +90,9 @@ async function render() {
   for (const r of recipes) {
     const li = document.createElement('li');
     li.className = 'row';
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
+    li.dataset.id = r.id;
 
     const avatar = document.createElement('div');
     avatar.className = 'avatar';
@@ -103,10 +106,18 @@ async function render() {
     title.textContent = r.title;
     const meta = document.createElement('p');
     meta.className = 'row-meta';
-    meta.textContent = `${plural(r.ingredients.length, 'ingrediente', 'ingredientes')} · ${plural(r.steps.length, 'passo', 'passos')}`;
+    meta.textContent = summary(r);
     text.append(title, meta);
 
-    li.append(avatar, text);
+    const chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    chev.setAttribute('viewBox', '0 0 24 24');
+    chev.setAttribute('width', '18');
+    chev.setAttribute('height', '18');
+    chev.setAttribute('class', 'chevron');
+    chev.setAttribute('aria-hidden', 'true');
+    chev.innerHTML = '<path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
+
+    li.append(avatar, text, chev);
     list.append(li);
   }
 
@@ -115,23 +126,134 @@ async function render() {
   $('count').textContent = plural(recipes.length, 'receita', 'receitas');
 }
 
+$('list').addEventListener('click', (e) => {
+  const row = e.target.closest('.row');
+  if (row) openDetail(row.dataset.id);
+});
+$('list').addEventListener('keydown', (e) => {
+  const row = e.target.closest('.row');
+  if (row && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    openDetail(row.dataset.id);
+  }
+});
+
+/* ---------- Detalhe ---------- */
+const detail = $('detail');
+let current = null; // receita aberta no detalhe
+
+function fillDetail(r) {
+  $('detailTitle').textContent = r.title;
+  $('detailMeta').textContent = summary(r);
+
+  const ing = $('detailIngredients');
+  ing.replaceChildren(...r.ingredients.map((t) => {
+    const li = document.createElement('li');
+    li.textContent = t;
+    return li;
+  }));
+  ing.hidden = r.ingredients.length === 0;
+  $('noIngredients').hidden = r.ingredients.length > 0;
+
+  const steps = $('detailSteps');
+  steps.replaceChildren(...r.steps.map((t) => {
+    const li = document.createElement('li');
+    li.textContent = t;
+    return li;
+  }));
+  steps.hidden = r.steps.length === 0;
+  $('noSteps').hidden = r.steps.length > 0;
+}
+
+async function showDetail(id) {
+  let r;
+  try { r = await getRecipe(id); } catch (e) { console.error(e); }
+  if (!r) {
+    hideDetail();
+    return false;
+  }
+  current = r;
+  fillDetail(r);
+  if (detail.hidden) {
+    detail.hidden = false;
+    detail.scrollTop = 0;
+    void detail.offsetHeight;
+    detail.classList.add('open');
+  }
+  return true;
+}
+
+function hideDetail() {
+  current = null;
+  if (detail.hidden) return;
+  detail.classList.remove('open');
+  setTimeout(() => { if (!current) detail.hidden = true; }, 300);
+}
+
+// Navegação com histórico: o gesto/botão "voltar" fecha o detalhe
+function openDetail(id) {
+  history.pushState({ recipe: id }, '', `#r=${encodeURIComponent(id)}`);
+  showDetail(id);
+}
+
+function goBack() {
+  if (history.state && history.state.recipe) history.back();
+  else {
+    history.replaceState(null, '', location.pathname);
+    hideDetail();
+  }
+}
+
+window.addEventListener('popstate', () => {
+  const id = history.state && history.state.recipe;
+  if (id) showDetail(id);
+  else hideDetail();
+});
+
+$('backBtn').addEventListener('click', goBack);
+$('editBtn').addEventListener('click', () => { if (current) openSheet(current); });
+
+$('deleteBtn').addEventListener('click', async () => {
+  if (!current) return;
+  if (!confirm(`Apagar "${current.title}"?\nEsta ação não pode ser desfeita.`)) return;
+  try {
+    await deleteRecipe(current.id);
+    await render();
+    goBack();
+    toast('Receita apagada');
+  } catch (e) {
+    console.error(e);
+    toast('Não foi possível apagar');
+  }
+});
+
 /* ---------- Formulário (folha) ---------- */
 const sheet = $('sheet');
 const form = $('form');
 const titleInput = $('title');
+const ingInput = $('ingredients');
+const stepsInput = $('steps');
 const saveBtn = $('saveBtn');
+let editing = null; // receita a editar (null = nova)
+let initial = '';   // estado inicial para detetar alterações
 
-function isDirty() {
-  return [titleInput, $('ingredients'), $('steps')].some((el) => el.value.trim() !== '');
-}
+const snapshot = () => [titleInput.value, ingInput.value, stepsInput.value].map((v) => v.trim()).join('\u0000');
 
-function openSheet() {
+function openSheet(recipe = null) {
+  editing = recipe;
   form.reset();
-  saveBtn.disabled = true;
+  if (recipe) {
+    titleInput.value = recipe.title;
+    ingInput.value = recipe.ingredients.join('\n');
+    stepsInput.value = recipe.steps.join('\n');
+  }
+  $('sheetTitle').textContent = recipe ? 'Editar receita' : 'Nova receita';
+  initial = snapshot();
+  saveBtn.disabled = titleInput.value.trim() === '';
   sheet.hidden = false;
   void sheet.offsetHeight; // força reflow para a animação
   sheet.classList.add('open');
-  setTimeout(() => titleInput.focus(), 320);
+  if (!recipe) setTimeout(() => titleInput.focus(), 320);
 }
 
 function closeSheet() {
@@ -141,7 +263,10 @@ function closeSheet() {
 }
 
 function requestClose() {
-  if (isDirty() && !confirm('Descartar esta receita?')) return;
+  if (snapshot() !== initial) {
+    const msg = editing ? 'Descartar as alterações?' : 'Descartar esta receita?';
+    if (!confirm(msg)) return;
+  }
   closeSheet();
 }
 
@@ -152,7 +277,7 @@ titleInput.addEventListener('input', () => {
 titleInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    $('ingredients').focus();
+    ingInput.focus();
   }
 });
 
@@ -162,11 +287,10 @@ form.addEventListener('submit', async (e) => {
   if (!title) return;
   const now = Date.now();
   const recipe = {
-    id: newId(),
+    ...(editing || { id: newId(), createdAt: now }),
     title,
-    ingredients: toLines($('ingredients').value),
-    steps: toLines($('steps').value),
-    createdAt: now,
+    ingredients: toLines(ingInput.value),
+    steps: toLines(stepsInput.value),
     updatedAt: now,
   };
   saveBtn.disabled = true;
@@ -174,7 +298,13 @@ form.addEventListener('submit', async (e) => {
     await saveRecipe(recipe);
     closeSheet();
     await render();
-    toast('Receita guardada');
+    if (editing) {
+      current = recipe;
+      fillDetail(recipe);
+      toast('Alterações guardadas');
+    } else {
+      toast('Receita guardada');
+    }
   } catch (err) {
     console.error(err);
     saveBtn.disabled = false;
@@ -182,13 +312,16 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-$('addBtn').addEventListener('click', openSheet);
+$('addBtn').addEventListener('click', () => openSheet());
 $('cancelBtn').addEventListener('click', requestClose);
 sheet.querySelector('[data-close]').addEventListener('click', requestClose);
 
 /* ---------- Arranque ---------- */
 $('version').textContent = `v${APP_VERSION}`;
-render();
+render().then(() => {
+  // Ao reabrir a app com uma receita aberta, volta à lista
+  if (location.hash) history.replaceState(null, '', location.pathname);
+});
 
 /* ---------- Offline / atualizações ---------- */
 if ('serviceWorker' in navigator) {
