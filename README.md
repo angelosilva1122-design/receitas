@@ -1,6 +1,6 @@
 # Receitas
 
-**Versão atual: v1.1.0** · https://receitas-angelo.netlify.app
+**Versão atual: v1.2.0** · https://receitas-angelo.netlify.app
 
 App minimalista para guardar receitas no iPhone, inspirada na Recipe Keeper.
 É uma PWA: instala-se pelo Safari e guarda tudo localmente no telemóvel (IndexedDB), sem contas nem servidores.
@@ -24,6 +24,7 @@ App minimalista para guardar receitas no iPhone, inspirada na Recipe Keeper.
 | v0.9.0 | Fotografias (incluídas no backup) |
 | v1.0.0 | Definições com aparência (claro/escuro/sistema), modo escuro, ecrã de arranque e offline revisto |
 | v1.1.0 | Nutrição: porção, calorias, gorduras, colesterol, sódio, carboidratos, fibra, açúcares e proteína |
+| v1.2.0 | Formato das quantidades nas Definições: Auto, Decimal (1,5) ou Fração (1 ½) |
 
 Versões `x.y.Z` são correções de bugs.
 

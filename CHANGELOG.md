@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0 — 2026-10-26
+- Nova opção em Definições → "Quantidades dos ingredientes": Auto, Decimal ou Fração
+  - Auto: segue o formato escrito na receita (comportamento anterior)
+  - Decimal: 1,5 c. sopa · 0,25 chávena
+  - Fração: 1 ½ c. sopa · ¼ chávena (fração mais próxima em meios, terços, quartos ou oitavos)
+- Em Decimal e Fração, as quantidades não inteiras são mostradas no formato escolhido mesmo sem mudar as porções
+- A escolha fica guardada e aplica-se ao detalhe e ao modo cozinhar
+
 ## v1.1.1 — 2026-10-26
 - Porções aparecem sempre ao lado da Preparação e da Cozedura, com − / +
 - Ao mudar as porções, as quantidades dos ingredientes são recalculadas (ex.: 4 → 5 porções, 400 g de frango → 500 g)

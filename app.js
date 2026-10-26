@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.2.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -214,9 +214,35 @@ function parseNum(t) {
   return total;
 }
 
-function formatNum(v, decimal = false) {
+/* Formato das quantidades (Definições):
+   auto     — segue o que está escrito na receita (decimais ficam decimais, o resto em fração quando é "redondo")
+   decimal  — 1,5 · 0,25 · 2,33
+   fraction — 1 ½ · ¼ · 2 ⅓ (fração mais próxima, em oitavos/terços) */
+const QTY_KEY = 'receitas.qtyFormat';
+const QTY_FORMATS = ['auto', 'decimal', 'fraction'];
+let qtyFormat = 'auto';
+try { const v = localStorage.getItem(QTY_KEY); if (QTY_FORMATS.includes(v)) qtyFormat = v; } catch { /* ignora */ }
+
+const ALL_FRACTIONS = [[0, ''], [1 / 8, '⅛'], [1 / 4, '¼'], [1 / 3, '⅓'], [3 / 8, '⅜'], [1 / 2, '½'], [5 / 8, '⅝'], [2 / 3, '⅔'], [3 / 4, '¾'], [7 / 8, '⅞'], [1, '']];
+const asDecimal = (v) => String(Math.round(v * 100) / 100).replace('.', ',');
+
+function asFraction(v) {
+  let whole = Math.floor(v);
+  const rest = v - whole;
+  let best = ALL_FRACTIONS[0];
+  for (const f of ALL_FRACTIONS) if (Math.abs(rest - f[0]) < Math.abs(rest - best[0])) best = f;
+  if (best[0] === 1) { whole += 1; best = ALL_FRACTIONS[0]; }
+  if (!whole && !best[1]) return '⅛'; // nunca mostrar "0"
+  if (!best[1]) return String(whole);
+  return whole ? `${whole} ${best[1]}` : best[1];
+}
+
+function formatNum(v, decimalSource = false, mode = qtyFormat) {
   if (v >= 10) return String(Math.round(v));
-  if (decimal) return String(Math.round(v * 100) / 100).replace('.', ',');
+  if (mode === 'decimal') return asDecimal(v);
+  if (mode === 'fraction') return asFraction(v);
+  // automático
+  if (decimalSource) return asDecimal(v);
   const whole = Math.floor(v);
   const rest = v - whole;
   if (rest < 0.03) return String(whole);
@@ -227,24 +253,31 @@ function formatNum(v, decimal = false) {
   return (Math.round(v * 10) / 10).toString().replace('.', ',');
 }
 
-// Devolve a linha dividida em [antes, quantidade, depois] já ajustada ao fator
-function scaleLine(line, factor) {
-  if (factor === 1) return [line, '', ''];
+// Devolve a linha dividida em [antes, quantidade, depois] já ajustada ao fator e ao formato escolhido
+function scaleLine(line, factor, mode = qtyFormat) {
+  if (factor === 1 && mode === 'auto') return [line, '', ''];
   const m = line.match(QTY_RE);
   if (!m) return [line, '', ''];
-  const start = m.index + m[1].length;
   const a = parseNum(m[2]);
   if (!a && a !== 0) return [line, '', ''];
-  const dec = /[.,]/.test(m[2]); // "1,5 kg" continua em decimal
-  let qty = formatNum(a * factor, dec);
-  if (m[4]) qty += m[3] + formatNum(parseNum(m[4]) * factor, dec);
-  return [line.slice(0, start), qty, line.slice(m.index + m[0].length)];
+  const b = m[4] ? parseNum(m[4]) : null;
+  // Sem mudança de porções, só se reescrevem quantidades não inteiras (ex.: 1,5 → 1 ½)
+  if (factor === 1 && Number.isInteger(a) && (b === null || Number.isInteger(b))) return [line, '', ''];
+  const start = m.index + m[1].length;
+  const dec = /[.,]/.test(m[2]); // em "Automático", "1,5 kg" continua em decimal
+  let qty = formatNum(a * factor, dec, mode);
+  if (b !== null) qty += m[3] + formatNum(b * factor, dec, mode);
+  let after = line.slice(m.index + m[0].length);
+  // "1c sopa" → "1 ½ c sopa": um símbolo de fração não fica colado à palavra seguinte
+  if (/[½⅓⅔¼¾⅛⅜⅝⅞]$/.test(qty) && /^\p{L}/u.test(after)) after = ` ${after}`;
+  return [line.slice(0, start), qty, after];
 }
 
-// Preenche um elemento com a linha, destacando a quantidade ajustada
+// Preenche um elemento com a linha; a quantidade só fica destacada quando as porções mudaram
 function fillLine(el, line, factor) {
   const [before, qty, after] = scaleLine(line, factor);
   if (!qty) { el.textContent = line; return; }
+  if (factor === 1) { el.textContent = before + qty + after; return; }
   const strong = document.createElement('strong');
   strong.className = 'qty';
   strong.textContent = qty;
@@ -1468,6 +1501,29 @@ $('themePicker').addEventListener('click', (e) => {
   applyTheme(theme);
 });
 applyTheme(readTheme());
+
+/* ---------- Formato das quantidades ---------- */
+function renderQtyPicker() {
+  document.querySelectorAll('#qtyPicker button').forEach((b) => {
+    const on = b.dataset.format === qtyFormat;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  const ex = { auto: 'Segue o que está escrito na receita.', decimal: 'Ex.: 1,5 c. sopa de azeite', fraction: 'Ex.: 1 ½ c. sopa de azeite' };
+  $('qtyHint').textContent = ex[qtyFormat];
+}
+$('qtyPicker').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-format]');
+  if (!b) return;
+  qtyFormat = b.dataset.format;
+  try { localStorage.setItem(QTY_KEY, qtyFormat); } catch { /* ignora */ }
+  renderQtyPicker();
+  if (current) {
+    fillDetail(current);
+    if (!cook.hidden) renderCook();
+  }
+});
+renderQtyPicker();
 
 /* ---------- Arranque ---------- */
 $('about').textContent = `Receitas v${APP_VERSION} · As receitas e fotografias ficam guardadas apenas neste telemóvel e funcionam sem internet.`;

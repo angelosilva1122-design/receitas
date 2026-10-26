@@ -574,3 +574,9 @@ h3.label { margin: 0; }
 
 /* v1.1.1: porções sem valor definido */
 .stepper.unset strong { color: var(--muted); cursor: pointer; }
+
+/* v1.2.0: formato das quantidades */
+.qty-picker button { gap: 2px; padding: 10px 6px 9px; }
+.qty-picker strong { font-size: 18px; font-weight: 600; color: inherit; }
+.qty-picker small { font-size: 12px; }
+#qtyHint { margin-top: -2px; }
