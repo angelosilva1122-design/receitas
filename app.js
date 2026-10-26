@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -263,11 +263,24 @@ function servingsStepper(r, onChange) {
   minus.textContent = '−';
   minus.setAttribute('aria-label', 'Menos porções');
   const value = document.createElement('strong');
-  value.textContent = viewServings;
   const plus = document.createElement('button');
   plus.type = 'button';
   plus.textContent = '+';
   plus.setAttribute('aria-label', 'Mais porções');
+
+  if (!r.servings) {
+    // Receita sem porções definidas: o primeiro toque pergunta para quantas é a receita
+    value.textContent = '—';
+    const ask = () => askBaseServings(r, onChange);
+    minus.addEventListener('click', ask);
+    plus.addEventListener('click', ask);
+    value.addEventListener('click', ask);
+    wrap.append(minus, value, plus);
+    wrap.classList.add('unset');
+    return wrap;
+  }
+
+  value.textContent = viewServings;
   minus.disabled = viewServings <= 1;
   plus.disabled = viewServings >= 99;
   minus.addEventListener('click', () => { viewServings = Math.max(1, viewServings - 1); onChange(); });
@@ -275,6 +288,26 @@ function servingsStepper(r, onChange) {
   wrap.append(minus, value, plus);
   wrap.classList.toggle('changed', viewServings !== r.servings);
   return wrap;
+}
+
+// Pergunta (uma vez) para quantas porções são as quantidades escritas na receita
+async function askBaseServings(r, onChange) {
+  const answer = prompt('Para quantas porções são as quantidades desta receita?', '4');
+  if (answer === null) return;
+  const n = parseCount(answer);
+  if (!n || n > 99) { toast('Indica um número entre 1 e 99'); return; }
+  const updated = { ...r, servings: n, updatedAt: Date.now() };
+  try {
+    await saveRecipe(updated);
+    if (current && current.id === r.id) current = updated;
+    viewServings = n;
+    onChange();
+    render();
+    toast(`Receita para ${plural(n, 'porção', 'porções')}`);
+  } catch (e) {
+    console.error(e);
+    toast('Não foi possível guardar');
+  }
 }
 
 /* ---------- Nutrição ---------- */
@@ -584,15 +617,14 @@ function fillDetail(r) {
     div.append(v, l);
     return div;
   }));
-  if (r.servings) {
-    const div = document.createElement('div');
-    div.className = 'fact servings';
-    const l = document.createElement('span');
-    l.textContent = 'Porções';
-    div.append(servingsStepper(r, () => fillDetail(current)), l);
-    factsEl.append(div);
-  }
-  factsEl.hidden = !factsEl.children.length;
+  // Porções sempre ao lado dos tempos (com − / + que ajustam os ingredientes)
+  const sDiv = document.createElement('div');
+  sDiv.className = 'fact servings';
+  const sLabel = document.createElement('span');
+  sLabel.textContent = 'Porções';
+  sDiv.append(servingsStepper(r, () => fillDetail(current)), sLabel);
+  factsEl.append(sDiv);
+  factsEl.hidden = false;
 
   const reset = $('servingsReset');
   reset.hidden = factor === 1;
@@ -763,14 +795,10 @@ function renderCook() {
   }));
   $('toSteps').hidden = !hasSteps;
   const cs = $('cookServings');
-  if (r.servings) {
-    const label = document.createElement('span');
-    label.textContent = 'Porções';
-    cs.replaceChildren(label, servingsStepper(r, () => { renderCook(); fillDetail(current); }));
-    cs.hidden = false;
-  } else {
-    cs.hidden = true;
-  }
+  const csLabel = document.createElement('span');
+  csLabel.textContent = 'Porções';
+  cs.replaceChildren(csLabel, servingsStepper(r, () => { renderCook(); fillDetail(current); }));
+  cs.hidden = !hasIng;
 
   // Passos
   $('cookSteps').hidden = cookState.tab !== 'steps';

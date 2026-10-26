@@ -571,3 +571,6 @@ h3.label { margin: 0; }
 
 /* Correção: nas folhas com muito conteúdo, os blocos não encolhem (fazem scroll) */
 .sheet-body > * { flex-shrink: 0; }
+
+/* v1.1.1: porções sem valor definido */
+.stepper.unset strong { color: var(--muted); cursor: pointer; }

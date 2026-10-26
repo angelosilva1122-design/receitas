@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.1 — 2026-10-26
+- Porções aparecem sempre ao lado da Preparação e da Cozedura, com − / +
+- Ao mudar as porções, as quantidades dos ingredientes são recalculadas (ex.: 4 → 5 porções, 400 g de frango → 500 g)
+- Receitas sem porções definidas: o primeiro toque em − / + pergunta para quantas porções é a receita e guarda esse valor
+
 ## v1.1.0 — 2026-10-26
 - Nova secção "Nutrição" no formulário e no detalhe, entre os Passos e as Notas
 - Campos: Porção (por omissão "1 dose"), Calorias, Gorduras Total, Gorduras Saturada, Colesterol, Sódio, Carboidrato Total, Fibra dietética, Açúcares e Proteína
