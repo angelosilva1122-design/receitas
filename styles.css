@@ -542,3 +542,32 @@ h3.label { margin: 0; }
   :root:not([data-theme="light"]) .cook-btn { box-shadow: none; }
 }
 :root[data-theme="dark"] .round-btn, :root[data-theme="dark"] .cook-btn { box-shadow: none; }
+
+/* v1.1.0: nutrição */
+.nutri-form { background: var(--surface); border-radius: 12px; padding: 4px 14px; }
+.nutri-portion, .nutri-field {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 0; min-height: 50px;
+}
+.nutri-portion { border-bottom: 1px solid var(--line); }
+.nutri-portion span, .nutri-field > span:first-child { font-size: 16px; color: var(--ink); }
+.nutri-field.sub > span:first-child { padding-left: 14px; color: var(--muted); }
+.nutri-field + .nutri-field { border-top: 1px solid var(--line); }
+.nutri-portion input, .nutri-field input {
+  background: var(--bg); text-align: right; padding: 9px 12px; border-radius: 10px;
+}
+.nutri-portion input { width: 140px; }
+.nutri-field .unit-input { width: 132px; flex: none; }
+.nutri-field .unit-input input { padding-right: 46px; }
+
+.nutri { background: var(--surface); border-radius: var(--radius); padding: 6px 16px; }
+.nutri[hidden] { display: none; }
+.nutri-head { padding: 8px 0 10px; color: var(--muted); font-size: 14px; border-bottom: 2px solid var(--ink); }
+.nutri-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; }
+.nutri-row + .nutri-row { border-top: 1px solid var(--line); }
+.nutri-row strong { font-weight: 600; white-space: nowrap; }
+.nutri-row.sub span { padding-left: 16px; color: var(--muted); }
+.nutri-row.sub strong { font-weight: 500; }
+
+/* Correção: nas folhas com muito conteúdo, os blocos não encolhem (fazem scroll) */
+.sheet-body > * { flex-shrink: 0; }

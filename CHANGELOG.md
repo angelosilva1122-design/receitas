@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.0 — 2026-10-26
+- Nova secção "Nutrição" no formulário e no detalhe, entre os Passos e as Notas
+- Campos: Porção (por omissão "1 dose"), Calorias, Gorduras Total, Gorduras Saturada, Colesterol, Sódio, Carboidrato Total, Fibra dietética, Açúcares e Proteína
+- No detalhe só aparecem os valores preenchidos; a secção não aparece se estiver vazia
+- Backup e importação incluem a nutrição
+- Correção: no ecrã Definições, os botões Exportar/Importar ficavam espremidos e sem resposta ao toque quando o conteúdo não cabia no ecrã
+
 ## v1.0.0 — 2026-10-25
 Primeira versão completa.
 - Novo ecrã "Definições" (botão da roda dentada): Aparência, Organizar (pratos e categorias), Cópia de segurança e Sobre

@@ -134,6 +134,9 @@
       <ol id="detailSteps" class="steps"></ol>
       <p id="noSteps" class="none" hidden>Sem passos.</p>
 
+      <h2 id="nutriTitle" class="section-title" hidden>Nutrição</h2>
+      <div id="detailNutri" class="nutri" hidden></div>
+
       <h2 id="notesTitle" class="section-title" hidden>Notas</h2>
       <p id="detailNotes" class="notes" hidden></p>
 
@@ -229,6 +232,16 @@
           <span class="label">Passos <small>um por linha</small></span>
           <textarea id="steps" name="steps" rows="6" placeholder="Pré-aquecer o forno a 180 °C.&#10;Bater os ovos com o açúcar.&#10;Juntar a farinha e levar ao forno."></textarea>
         </label>
+        <div class="field">
+          <span class="label">Nutrição <small>opcional</small></span>
+          <div class="nutri-form">
+            <label class="nutri-portion">
+              <span>Porção</span>
+              <input id="nutriPortion" type="text" maxlength="40" placeholder="1 dose" autocomplete="off">
+            </label>
+            <div id="nutriFields" class="nutri-grid"></div>
+          </div>
+        </div>
         <label class="field">
           <span class="label">Notas <small>opcional</small></span>
           <textarea id="notes" name="notes" rows="3" class="short" placeholder="Dicas, variações, onde comprar…"></textarea>

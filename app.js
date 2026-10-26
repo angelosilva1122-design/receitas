@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 
 /* ---------- Armazenamento local (IndexedDB) ---------- */
 const DB_NAME = 'receitas';
@@ -275,6 +275,43 @@ function servingsStepper(r, onChange) {
   wrap.append(minus, value, plus);
   wrap.classList.toggle('changed', viewServings !== r.servings);
   return wrap;
+}
+
+/* ---------- Nutrição ---------- */
+const DEFAULT_PORTION = '1 dose';
+const NUTRI = [
+  { key: 'calories', label: 'Calorias', unit: 'kcal' },
+  { key: 'fat', label: 'Gorduras Total', unit: 'g' },
+  { key: 'satFat', label: 'Gorduras Saturada', unit: 'g', sub: true },
+  { key: 'cholesterol', label: 'Colesterol', unit: 'mg' },
+  { key: 'sodium', label: 'Sódio', unit: 'mg' },
+  { key: 'carbs', label: 'Carboidrato Total', unit: 'g' },
+  { key: 'fiber', label: 'Fibra dietética', unit: 'g', sub: true },
+  { key: 'sugar', label: 'Açúcares', unit: 'g', sub: true },
+  { key: 'protein', label: 'Proteína', unit: 'g' },
+];
+
+// "12,5" / "12.5" → 12.5 ; vazio ou inválido → null
+function parseAmount(v) {
+  const t = String(v ?? '').trim().replace(',', '.');
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? Math.min(Math.round(n * 10) / 10, 99999) : null;
+}
+const formatAmount = (n) => String(n).replace('.', ',');
+
+// Devolve a nutrição limpa, ou null se não houver nenhum valor
+function cleanNutrition(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  let any = false;
+  for (const f of NUTRI) {
+    const v = parseAmount(raw[f.key]);
+    if (v !== null) { out[f.key] = v; any = true; }
+  }
+  if (!any) return null;
+  const portion = typeof raw.portion === 'string' && raw.portion.trim() ? raw.portion.trim().slice(0, 40) : DEFAULT_PORTION;
+  return { portion, ...out };
 }
 
 // Botão "chip" reutilizável
@@ -560,6 +597,26 @@ function fillDetail(r) {
   const reset = $('servingsReset');
   reset.hidden = factor === 1;
   reset.textContent = `Quantidades para ${plural(viewServings || 0, 'porção', 'porções')} · repor ${r.servings}`;
+
+  const nutri = cleanNutrition(r.nutrition);
+  const nEl = $('detailNutri');
+  $('nutriTitle').hidden = !nutri;
+  nEl.hidden = !nutri;
+  if (nutri) {
+    const head = document.createElement('div');
+    head.className = 'nutri-head';
+    head.textContent = `Por ${nutri.portion}`;
+    nEl.replaceChildren(head, ...NUTRI.filter((f) => nutri[f.key] !== undefined).map((f) => {
+      const row = document.createElement('div');
+      row.className = 'nutri-row' + (f.sub ? ' sub' : '');
+      const l = document.createElement('span');
+      l.textContent = f.label;
+      const v = document.createElement('strong');
+      v.textContent = `${formatAmount(nutri[f.key])} ${f.unit}`;
+      row.append(l, v);
+      return row;
+    }));
+  }
 
   const notes = (r.notes || '').trim();
   $('notesTitle').hidden = !notes;
@@ -859,7 +916,36 @@ let initial = '';   // estado inicial para detetar alterações
 let formDish = null;
 let formCats = new Set();
 
-const fields = () => [titleInput, ingInput, stepsInput, prepInput, cookInput, servingsInput, notesInput];
+// Campos de nutrição gerados a partir da lista NUTRI
+$('nutriFields').replaceChildren(...NUTRI.map((f) => {
+  const label = document.createElement('label');
+  label.className = 'nutri-field' + (f.sub ? ' sub' : '');
+  const name = document.createElement('span');
+  name.textContent = f.label;
+  const wrap = document.createElement('span');
+  wrap.className = 'unit-input';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.inputMode = 'decimal';
+  input.id = `nutri-${f.key}`;
+  input.autocomplete = 'off';
+  input.placeholder = '—';
+  input.addEventListener('input', () => {
+    let v = input.value.replace(/[^\d.,]/g, '').replace('.', ',');
+    const i = v.indexOf(',');
+    if (i !== -1) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/,/g, '').slice(0, 1);
+    if (v !== input.value) input.value = v.slice(0, 7);
+  });
+  const unit = document.createElement('span');
+  unit.textContent = f.unit;
+  wrap.append(input, unit);
+  label.append(name, wrap);
+  return label;
+}));
+const nutriPortion = $('nutriPortion');
+const nutriInputs = () => NUTRI.map((f) => $(`nutri-${f.key}`));
+
+const fields = () => [titleInput, ingInput, stepsInput, prepInput, cookInput, servingsInput, notesInput, nutriPortion, ...nutriInputs()];
 let formPhoto; // undefined = sem alterações, null = remover, { data, thumb } = nova
 const snapshot = () => [...fields().map((el) => el.value.trim()), formDish || '', [...formCats].sort().join('|'), formPhoto === undefined ? '' : 'foto'].join('\u0000');
 
@@ -956,6 +1042,7 @@ $('formCats').addEventListener('click', async (e) => {
 function openSheet(recipe = null) {
   editing = recipe;
   form.reset();
+  nutriPortion.value = DEFAULT_PORTION; // por omissão, 1 dose
   formDish = recipe && recipe.dish ? recipe.dish : null;
   formCats = new Set(recipe && recipe.categories ? recipe.categories : []);
   formPhoto = undefined;
@@ -970,6 +1057,11 @@ function openSheet(recipe = null) {
     cookInput.value = recipe.cookTime || '';
     servingsInput.value = recipe.servings || '';
     notesInput.value = recipe.notes || '';
+    const n = cleanNutrition(recipe.nutrition);
+    if (n) {
+      nutriPortion.value = n.portion;
+      NUTRI.forEach((f) => { if (n[f.key] !== undefined) $(`nutri-${f.key}`).value = formatAmount(n[f.key]); });
+    }
   }
   $('sheetTitle').textContent = recipe ? 'Editar receita' : 'Nova receita';
   initial = snapshot();
@@ -1019,6 +1111,10 @@ form.addEventListener('submit', async (e) => {
     cookTime: parseCount(cookInput.value),
     servings: parseCount(servingsInput.value),
     notes: notesInput.value.trim(),
+    nutrition: cleanNutrition({
+      portion: nutriPortion.value,
+      ...Object.fromEntries(NUTRI.map((f) => [f.key, $(`nutri-${f.key}`).value])),
+    }),
     dish: formDish,
     categories: [...formCats].sort(byName),
     ...(formPhoto === null ? { thumb: null } : formPhoto ? { thumb: formPhoto.thumb } : {}),
@@ -1223,6 +1319,7 @@ function cleanRecipe(raw) {
     cookTime: parseCount(raw.cookTime ?? ''),
     servings: parseCount(raw.servings ?? ''),
     notes: typeof raw.notes === 'string' ? raw.notes.trim() : '',
+    nutrition: cleanNutrition(raw.nutrition),
     dish: typeof raw.dish === 'string' && raw.dish.trim() ? raw.dish.trim() : null,
     categories: strList(raw.categories),
     favorite: raw.favorite === true,
